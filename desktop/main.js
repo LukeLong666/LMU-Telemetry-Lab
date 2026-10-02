@@ -1,8 +1,121 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const http = require('http');
 const { spawn } = require('child_process');
 
 let backendProcess = null;
+
+function downloadFileWithRedirects(url, destPath, onProgress) {
+    return new Promise((resolve, reject) => {
+        const fileStream = fs.createWriteStream(destPath);
+        
+        const request = (currentUrl) => {
+            const protocol = currentUrl.startsWith('https') ? https : http;
+            
+            protocol.get(currentUrl, {
+                headers: { 'User-Agent': 'LMU-Telemetry-Lab-Updater' }
+            }, (response) => {
+                // Follow HTTP redirects (301, 302, 307, 308)
+                if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                    return request(response.headers.location);
+                }
+                
+                if (response.statusCode !== 200) {
+                    fileStream.close();
+                    fs.unlink(destPath, () => {});
+                    return reject(new Error(`Download failed with status code ${response.statusCode}`));
+                }
+
+                const totalBytes = parseInt(response.headers['content-length'] || '0', 10);
+                let downloadedBytes = 0;
+                let lastTime = Date.now();
+                let lastDownloaded = 0;
+
+                response.on('data', (chunk) => {
+                    downloadedBytes += chunk.length;
+                    fileStream.write(chunk);
+
+                    const now = Date.now();
+                    const elapsed = (now - lastTime) / 1000;
+                    
+                    if (elapsed >= 0.2 || downloadedBytes === totalBytes) {
+                        const speed = elapsed > 0 ? (downloadedBytes - lastDownloaded) / elapsed : 0;
+                        const percent = totalBytes > 0 ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)) : 0;
+                        
+                        onProgress({
+                            percent,
+                            transferred: downloadedBytes,
+                            total: totalBytes,
+                            speedBytesPerSec: speed
+                        });
+
+                        lastTime = now;
+                        lastDownloaded = downloadedBytes;
+                    }
+                });
+
+                response.on('end', () => {
+                    fileStream.end();
+                    resolve(destPath);
+                });
+
+                response.on('error', (err) => {
+                    fileStream.close();
+                    fs.unlink(destPath, () => {});
+                    reject(err);
+                });
+            }).on('error', (err) => {
+                fileStream.close();
+                fs.unlink(destPath, () => {});
+                reject(err);
+            });
+        };
+
+        request(url);
+    });
+}
+
+// Handle Auto-Update download IPC request
+ipcMain.on('download-update', async (event, { downloadUrl, version }) => {
+    const sender = event.sender;
+    const tempDir = app.getPath('temp');
+    const safeVersion = (version || 'latest').replace(/[^a-zA-Z0-9._-]/g, '');
+    const fileName = `LMU_Telemetry_Lab_Setup_${safeVersion}.exe`;
+    const targetPath = path.join(tempDir, fileName);
+
+    console.log(`[AutoUpdate] Starting download from: ${downloadUrl}`);
+    console.log(`[AutoUpdate] Installer target path: ${targetPath}`);
+
+    try {
+        await downloadFileWithRedirects(downloadUrl, targetPath, (progressData) => {
+            sender.send('update-progress', progressData);
+        });
+
+        console.log(`[AutoUpdate] Download complete! Launching installer at ${targetPath}...`);
+        sender.send('update-complete', { targetPath });
+
+        // Delay 1.2s to let UI display 100% completed status before launching installer and exiting
+        setTimeout(() => {
+            if (process.platform === 'win32') {
+                console.log(`[AutoUpdate] Launching installer with progress window: ${targetPath}`);
+
+                // Launch installer directly with oneClick progress bar (no interactive prompts, auto-relaunch when finished)
+                spawn(targetPath, [], {
+                    detached: true,
+                    stdio: 'ignore'
+                }).unref();
+                
+                app.quit();
+            }
+        }, 1200);
+
+    } catch (err) {
+        console.error("[AutoUpdate] Download error:", err);
+        sender.send('update-error', { error: err.message });
+    }
+});
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -12,6 +125,7 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
         },
         title: "LMU Telemetry Lab",
     });
@@ -72,8 +186,6 @@ function createWindow() {
             });
         });
 
-        const http = require('http');
-        
         const checkBackend = () => {
             return new Promise((resolve) => {
                 http.get('http://127.0.0.1:8000/api/v1/health', (res) => {
@@ -140,3 +252,4 @@ app.on('activate', () => {
         createWindow();
     }
 });
+

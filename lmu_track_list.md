@@ -21,3 +21,5 @@ lmu_version:1.3.1.2
 | **Circuit de Barcelona** | Circuit de Barcelona(4.657km, 14 turns) | Circuit de Barcelona, Catalunya, Circuit de Barcelona-Catalunya | Spain | Barcelona |
 | **WeatherTech Raceway Laguna Seca** | WeatherTech Raceway Laguna Seca(3.602km, 11 turns) | WeatherTech Raceway Laguna Seca, Laguna Seca | United States | Laguna Seca |
 | **Daytona International Speedway** | Daytona International Speedway Road Course(5.729km, 13 turns) | Daytona, Daytona International Speedway | United States | Daytona |
+| **Grand Prix of Long Beach** | Grand Prix of Long Beach(3.167km, 11 turns) | Long Beach, Long Beach Grand Prix, Grand Prix of Long Beach | United States | Long Beach |
+| **Michelin Raceway Road Atlanta** | Michelin Raceway Road Atlanta(4.088km, 12 turns) | Road Atlanta, Michelin Raceway Road Atlanta | United States | Road Atlanta |

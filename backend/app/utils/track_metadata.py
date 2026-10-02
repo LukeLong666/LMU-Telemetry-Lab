@@ -17,6 +17,8 @@ TRACK_ELEVATION_METADATA = {
     "catalunya": 22.0,
     "laguna seca": 55.0,
     "daytona": 9.5,
+    "long beach": 8.5,
+    "road atlanta": 42.0,
 }
 
 def get_track_range(track_name):

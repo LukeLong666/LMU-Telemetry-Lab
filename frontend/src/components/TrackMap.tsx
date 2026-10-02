@@ -1883,7 +1883,7 @@ export const TrackMap = React.memo(({ isExpanded = false, onToggleExpand, isMini
                 ctx.stroke();
 
                 // 2. Labels - Only in main map
-                if (!isMiniMap) {
+                if (!isMiniMap && label) {
                     const forwardOffset = 30 / effK;
                     const labelExtra = 12 / effK;
 
@@ -2195,7 +2195,7 @@ export const TrackMap = React.memo(({ isExpanded = false, onToggleExpand, isMini
                     const leftPt = trackData.referenceTrack.leftEdges[bestIdx];
                     const rightPt = trackData.referenceTrack.rightEdges[bestIdx];
 
-                    drawBoundary(leftPt, rightPt, dx, dy, nx, ny, `S${sector.id + 1}`);
+                    drawBoundary(leftPt, rightPt, dx, dy, nx, ny, "", sector.id === 0);
                 });
 
                 if (hasSectors && sectorBreakpoints && sectorBreakpoints.length >= 2) {
@@ -2206,7 +2206,7 @@ export const TrackMap = React.memo(({ isExpanded = false, onToggleExpand, isMini
 
                     const len = trackData.referenceTrack.points.length;
                     
-                    const drawSectorBadgeHelper = (startI: number, endI: number, sectorIdx: number, label: string) => {
+                    const drawSectorBadgeHelper = (startI: number, endI: number, sectorIdx: number) => {
                         let midI = Math.floor((startI + endI) / 2);
                         if (startI > endI) { // wraps around finish line
                             midI = Math.floor((startI + endI + len) / 2) % len;
@@ -2214,7 +2214,8 @@ export const TrackMap = React.memo(({ isExpanded = false, onToggleExpand, isMini
                         if (midI >= len) midI = len - 1;
                         if (midI < 0) midI = 0;
 
-                        const isRightSide = sectorBadgeSides[label as keyof typeof sectorBadgeSides] === 'right';
+                        const sectorKey = `S${sectorIdx + 1}`;
+                        const isRightSide = sectorBadgeSides[sectorKey as keyof typeof sectorBadgeSides] === 'right';
                         const edgePt = isRightSide
                             ? trackData.referenceTrack.rightEdges[midI]
                             : trackData.referenceTrack.leftEdges[midI];
@@ -2263,7 +2264,7 @@ export const TrackMap = React.memo(({ isExpanded = false, onToggleExpand, isMini
                             }
                         }
 
-                        drawSegmentBadge(edgePt, nx, ny, label, false, badgeColor, diffText, isSelected, true);
+                        drawSegmentBadge(edgePt, nx, ny, String(sectorIdx + 1), false, badgeColor, diffText, isSelected, true);
                     };
 
                     const bpStartIdx = bpFinish ? bpFinish.index : 0;
@@ -2271,13 +2272,13 @@ export const TrackMap = React.memo(({ isExpanded = false, onToggleExpand, isMini
                     const bpS2Idx = bpS2 ? bpS2.index : Math.floor(len * 2 / 3);
 
                     if (selectedSectorIdx !== null) {
-                        if (selectedSectorIdx === 0) drawSectorBadgeHelper(bpStartIdx, bpS1Idx, 0, 'S1');
-                        else if (selectedSectorIdx === 1) drawSectorBadgeHelper(bpS1Idx, bpS2Idx, 1, 'S2');
-                        else if (selectedSectorIdx === 2) drawSectorBadgeHelper(bpS2Idx, bpFinish ? bpFinish.index : len - 1, 2, 'S3');
+                        if (selectedSectorIdx === 0) drawSectorBadgeHelper(bpStartIdx, bpS1Idx, 0);
+                        else if (selectedSectorIdx === 1) drawSectorBadgeHelper(bpS1Idx, bpS2Idx, 1);
+                        else if (selectedSectorIdx === 2) drawSectorBadgeHelper(bpS2Idx, bpFinish ? bpFinish.index : len - 1, 2);
                     } else {
-                        drawSectorBadgeHelper(bpStartIdx, bpS1Idx, 0, 'S1');
-                        drawSectorBadgeHelper(bpS1Idx, bpS2Idx, 1, 'S2');
-                        drawSectorBadgeHelper(bpS2Idx, bpFinish ? bpFinish.index : len - 1, 2, 'S3');
+                        drawSectorBadgeHelper(bpStartIdx, bpS1Idx, 0);
+                        drawSectorBadgeHelper(bpS1Idx, bpS2Idx, 1);
+                        drawSectorBadgeHelper(bpS2Idx, bpFinish ? bpFinish.index : len - 1, 2);
                     }
                 }
             }

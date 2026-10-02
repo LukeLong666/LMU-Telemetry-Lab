@@ -1,9 +1,10 @@
 
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { useTelemetryStore } from '../store/telemetryStore';
-import { Layout, LayoutGrid, Rows2, Layers, Split } from 'lucide-react';
+import { useTelemetryStore, CATEGORY_CHART_CONFIGS } from '../store/telemetryStore';
+import { Layout, LayoutGrid, Rows2, Layers, Split, Trash2, ChevronUp, ChevronDown, GripVertical, Palette, RotateCcw, X } from 'lucide-react';
 import type { TelemetryData } from '../types';
 import { handleGlassMouseMove } from '../utils/glassEffect';
 import { Tooltip } from './ui/Tooltip';
@@ -18,6 +19,18 @@ interface TelemetryChartProps {
     showLapTime?: boolean;
     isPlaying?: boolean;
     wheelIndex?: number; // 0:FL, 1:FR, 2:RL, 3:RR
+    customYMin?: number;
+    customYMax?: number;
+    onRemove?: () => void;
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
+    onDragHandleMouseDown?: () => void;
+    onDragHandleMouseLeave?: () => void;
+    onColorChange?: (color: string) => void;
+    onColorReset?: () => void;
+    isColorTuningPreview?: boolean;
 }
 
 const findIndexInChannelRange = (
@@ -54,9 +67,55 @@ const findIndexInChannelRange = (
 };
 
 export const TelemetryChart = React.memo<TelemetryChartProps>(({
-    channel, alias, color, height = 200, syncKey, unit = "", showLapTime = false, isPlaying = false, wheelIndex
+    channel, alias, color, height = 200, syncKey, unit = "", showLapTime = false, isPlaying = false, wheelIndex, customYMin, customYMax, onRemove, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onDragHandleMouseDown, onDragHandleMouseLeave, onColorChange, onColorReset, isColorTuningPreview = false
 }) => {
     const [isCollapsed, setIsCollapsed] = React.useState(false);
+    const [showColorPicker, setShowColorPicker] = React.useState(false);
+    const [modalMounted, setModalMounted] = React.useState(false);
+    const [isColorPickerClosing, setIsColorPickerClosing] = React.useState(false);
+
+    const openColorPickerModal = React.useCallback(() => {
+        setShowColorPicker(true);
+        setIsColorPickerClosing(false);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setModalMounted(true);
+            });
+        });
+    }, []);
+
+    const closeColorPickerModal = React.useCallback(() => {
+        setModalMounted(false);
+        setIsColorPickerClosing(true);
+        setTimeout(() => {
+            setShowColorPicker(false);
+            setIsColorPickerClosing(false);
+        }, 280);
+    }, []);
+
+    const handleColorChange = (newColor: string) => {
+        if (onColorChange) {
+            onColorChange(newColor);
+        } else {
+            useTelemetryStore.getState().updateChartConfig(channel, { color: newColor }, wheelIndex);
+        }
+    };
+
+    const handleColorReset = () => {
+        if (onColorReset) {
+            onColorReset();
+        } else {
+            let defaultColor = '#3b82f6';
+            for (const catConfigs of Object.values(CATEGORY_CHART_CONFIGS)) {
+                const found = catConfigs.find(c => c.id === channel && (wheelIndex === undefined ? true : c.wheelIndex === wheelIndex));
+                if (found) {
+                    defaultColor = found.color;
+                    break;
+                }
+            }
+            useTelemetryStore.getState().updateChartConfig(channel, { color: defaultColor }, wheelIndex);
+        }
+    };
 
 
     const telemetryData = useTelemetryStore(state => state.telemetryData);
@@ -176,38 +235,38 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
         }
         if (channel === 'RideHeights') {
             const labels = ['Front', 'Rear'];
-            const colors = ['#00aaff', '#fb923c'];
-            return { label: labels[effectiveIdx] || alias, stroke: colors[effectiveIdx] || color };
+            const colors = [color, '#fb923c'];
+            return { label: labels[effectiveIdx] || alias, stroke: (effectiveIdx === 0 ? color : colors[effectiveIdx]) || color };
         }
         if (channel === 'SuspPosFront') {
             const labels = ['FL', 'FR'];
-            const colors = ['#3b82f6', '#ef4444'];
-            return { label: labels[idx], stroke: colors[idx] };
+            const colors = [color, '#ef4444'];
+            return { label: labels[idx], stroke: colors[idx] || color };
         }
         if (channel === 'SuspPosRear') {
             const labels = ['RL', 'RR'];
-            const colors = ['#3b82f6', '#ef4444'];
-            return { label: labels[idx], stroke: colors[idx] };
+            const colors = [color, '#ef4444'];
+            return { label: labels[idx], stroke: colors[idx] || color };
         }
         if (channel === 'TyresPressure' || channel === 'Slip Ratio') {
             const labels = ['FL', 'FR', 'RL', 'RR'];
-            const colors = ['#3b82f6', '#ef4444', '#60a5fa', '#f87171'];
-            return { label: labels[effectiveIdx] || alias, stroke: colors[effectiveIdx] || color };
+            const colors = [color, '#ef4444', '#60a5fa', '#f87171'];
+            return { label: labels[effectiveIdx] || alias, stroke: (effectiveIdx === 0 ? color : colors[effectiveIdx]) || color };
         }
         if (isBundled && channel === 'ThirdDeflectionMerged') {
             const labels = ['FRONT', 'REAR'];
-            const colors = ['#22d3ee', '#fb923c'];
-            return { label: labels[idx], stroke: colors[idx] };
+            const colors = [color, '#fb923c'];
+            return { label: labels[idx], stroke: colors[idx] || color };
         }
         if (isBundled && channel === 'HandlingMerged') {
             const labels = ['YAW', 'STEER'];
-            const colors = ['#f43f5e', '#ff00ff'];
-            return { label: labels[idx], stroke: colors[idx] };
+            const colors = [color, '#ff00ff'];
+            return { label: labels[idx], stroke: colors[idx] || color };
         }
         if (isBundled && channel === 'PedalsMerged') {
             const labels = ['THROTTLE', 'BRAKE'];
-            const colors = ['#00ff00', '#ff2222'];
-            return { label: labels[idx], stroke: colors[idx] };
+            const colors = [color, '#ff2222'];
+            return { label: labels[idx], stroke: colors[idx] || color };
         }
         return { label: alias, stroke: color };
     };
@@ -1639,6 +1698,9 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
             maxY = 1.2;
         }
 
+        if (customYMin !== undefined && !Number.isNaN(customYMin)) minY = customYMin;
+        if (customYMax !== undefined && !Number.isNaN(customYMax)) maxY = customYMax;
+
         // Initialize scales to align with zoomRange if already present
         const activeZoomRange = useTelemetryStore.getState().zoomRange;
         let initialMinX = 0;
@@ -1944,18 +2006,21 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
     useEffect(() => {
         if (!chartRef.current) return;
         const observer = new ResizeObserver(entries => {
-            if (!uplotRef.current) return;
+            const u = uplotRef.current;
+            if (!u) return;
             for (const entry of entries) {
-                // Use the actual current content height for smooth animation sync
-                uplotRef.current.setSize({
-                    width: entry.contentRect.width,
-                    height: entry.contentRect.height
-                });
+                const newWidth = Math.floor(entry.contentRect.width);
+                if (newWidth > 0 && (u.width !== newWidth || u.height !== height)) {
+                    u.setSize({
+                        width: newWidth,
+                        height: height
+                    });
+                }
             }
         });
         observer.observe(chartRef.current);
         return () => observer.disconnect();
-    }, []); // Empty dependency array: we want the observer to live as long as the component
+    }, [height]); // Empty dependency array: we want the observer to live as long as the component
 
     // Cursor Index Sync: Programmatically update uPlot cursor to match store index/time via direct subscription
     useEffect(() => {
@@ -2129,22 +2194,117 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
                 }
             }}
             onMouseMove={handleGlassMouseMove}>
-            <div className="glass-content h-full flex flex-col relative z-10 px-1 py-1">
+            <div className="glass-content h-full flex items-stretch relative z-10 p-1">
                 <div
-                    className="glass-sync-bg rounded-2xl opacity-[0.05] z-0"
+                    className="glass-sync-bg rounded-2xl opacity-[0.05] z-0 pointer-events-none"
                     style={{ backgroundColor: getRGBA(color, 1) }}
                 />
 
-                <div className={`flex items-center justify-between px-3 h-10 flex-shrink-0 cursor-default select-none relative z-10`}>
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-[0.2em]"
-                                style={{ borderColor: getRGBA(color, 0.3), color: color, backgroundColor: getRGBA(color, 0.15) }}>
-                                {isNoABS ? "NO ABS DATA" : (alias || channel)}
-                            </span>
+                {/* Left Column for 3-in-1 Order Control Cluster & Remove Button (Far left, to the left of Y-axis, vertical) */}
+                {(onMoveUp || onMoveDown || onRemove) && (
+                    <div className={`flex flex-col items-center justify-center px-0 ${isCollapsed ? 'py-0' : 'py-1'} shrink-0 select-none z-20 -mr-2 hover:mr-2.5 transition-all duration-300 ease-out group/order-cluster`}>
+                        <div className={`flex flex-col items-center ${isCollapsed ? 'gap-0 -space-y-1' : 'gap-0.5'} transition-all duration-300 ease-out scale-60 opacity-25 group-hover/order-cluster:scale-130 group-hover/order-cluster:opacity-100 origin-center`}>
+                            {onRemove && (
+                                <div className={`transition-all duration-300 ease-out overflow-hidden flex items-center justify-center ${isCollapsed ? 'max-h-0 opacity-0 pointer-events-none scale-75' : 'max-h-6 opacity-100 scale-100'}`}>
+                                    <Tooltip text="Remove Chart Channel" position="left">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onRemove();
+                                            }}
+                                            className="p-0.5 text-red-400/80 hover:text-red-300 hover:bg-red-500/25 hover:scale-125 active:scale-95 rounded transition-all duration-200 cursor-pointer"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </Tooltip>
+                                </div>
+                            )}
+
+                            {(onMoveUp || onMoveDown) && (
+                                <>
+                                    <Tooltip text="Move Up" position="left">
+                                        <button
+                                            type="button"
+                                            disabled={!canMoveUp}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (canMoveUp && onMoveUp) onMoveUp();
+                                            }}
+                                            className={`${isCollapsed ? 'p-0' : 'p-0.5'} text-gray-400 hover:text-purple-300 hover:bg-purple-500/25 hover:scale-125 active:scale-95 rounded transition-all duration-200 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400 disabled:hover:scale-100 cursor-pointer`}
+                                        >
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                        </button>
+                                    </Tooltip>
+
+                                    {onDragHandleMouseDown && (
+                                        <div className={`transition-all duration-300 ease-out overflow-hidden flex items-center justify-center ${isCollapsed ? 'max-h-0 opacity-0 pointer-events-none scale-75' : 'max-h-6 opacity-100 scale-100'}`}>
+                                            <Tooltip text="Drag to Reorder" position="left">
+                                                <div
+                                                    onMouseDown={(e) => {
+                                                        e.stopPropagation();
+                                                        if (onDragHandleMouseDown) onDragHandleMouseDown();
+                                                    }}
+                                                    onMouseLeave={() => {
+                                                        if (onDragHandleMouseLeave) onDragHandleMouseLeave();
+                                                    }}
+                                                    className="p-0.5 text-purple-400/80 hover:text-purple-200 hover:bg-white/10 hover:scale-125 active:scale-95 rounded transition-all duration-200 cursor-grab active:cursor-grabbing"
+                                                >
+                                                    <GripVertical className="w-3.5 h-3.5" />
+                                                </div>
+                                            </Tooltip>
+                                        </div>
+                                    )}
+
+                                    <Tooltip text="Move Down" position="left">
+                                        <button
+                                            type="button"
+                                            disabled={!canMoveDown}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (canMoveDown && onMoveDown) onMoveDown();
+                                            }}
+                                            className={`${isCollapsed ? 'p-0' : 'p-0.5'} text-gray-400 hover:text-purple-300 hover:bg-purple-500/25 hover:scale-125 active:scale-95 rounded transition-all duration-200 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400 disabled:hover:scale-100 cursor-pointer`}
+                                        >
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                        </button>
+                                    </Tooltip>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex-1 min-w-0 flex flex-col h-full relative">
+                    <div className={`flex items-center justify-between px-3 h-10 flex-shrink-0 cursor-default select-none relative z-10`}>
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 relative">
+                                {isColorTuningPreview ? (
+                                    <span
+                                        className="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-[0.2em] shadow-sm"
+                                        style={{ borderColor: getRGBA(color, 0.4), color: color, backgroundColor: getRGBA(color, 0.18) }}
+                                    >
+                                        {isNoABS ? "NO ABS DATA" : (alias || channel)}
+                                    </span>
+                                ) : (
+                                    <Tooltip text="Click to edit chart color" position="top">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                openColorPickerModal();
+                                            }}
+                                            className="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
+                                            style={{ borderColor: getRGBA(color, 0.4), color: color, backgroundColor: getRGBA(color, 0.18) }}
+                                        >
+                                            {isNoABS ? "NO ABS DATA" : (alias || channel)}
+                                        </button>
+                                    </Tooltip>
+                                )}
 
                             {/* Calculate Merge Button Visibility Eligibility for Split Groups */}
                             {(() => {
+                                if (isColorTuningPreview) return null;
                                 const storeConfigs = useTelemetryStore.getState().chartConfigs;
                                 const activeTelemetryData = useTelemetryStore.getState().telemetryData;
 
@@ -2413,27 +2573,29 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
                             unit && <span className="text-[11px] font-bold text-gray-400 uppercase tracking-tighter ml-1" style={{ height: '24px', display: 'inline-flex', alignItems: 'center', transform: 'translateY(0.5px)' }}>{unit}</span>
                         )}
 
-                        <button
-                            className={`p-1.5 rounded-lg border transition-all active:scale-90 flex items-center justify-center glass-container-flat hover:scale-110 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 group/collapse ml-2`}
-                            onMouseMove={(e) => handleGlassMouseMove(e, 0.15)}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setIsCollapsed(!isCollapsed);
-                            }}
-                        >
-                            <div className="glass-content flex items-center justify-center">
-                                {isCollapsed ? (
-                                    <svg fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" className="w-3.5 h-3.5"><path d="M12 5v14m-7-7h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                                ) : (
-                                    <svg fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" className="w-3.5 h-3.5"><path d="M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                                )}
-                            </div>
-                        </button>
+                        <Tooltip text={isCollapsed ? "Expand Chart" : "Collapse Chart"} position="top">
+                            <button
+                                className={`p-1.5 rounded-lg border transition-all active:scale-90 flex items-center justify-center glass-container-flat hover:scale-110 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 group/collapse ml-2`}
+                                onMouseMove={(e) => handleGlassMouseMove(e, 0.15)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsCollapsed(!isCollapsed);
+                                }}
+                            >
+                                <div className="glass-content flex items-center justify-center">
+                                    {isCollapsed ? (
+                                        <svg fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" className="w-3.5 h-3.5"><path d="M12 5v14m-7-7h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                    ) : (
+                                        <svg fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" className="w-3.5 h-3.5"><path d="M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                    )}
+                                </div>
+                            </button>
+                        </Tooltip>
                     </div>
                 </div>
 
                 <div
-                    className={`grid transition-all ${isResizing ? 'duration-0' : 'duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]'} w-full overflow-hidden min-w-0 ${isCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100 mt-2'}`}
+                    className={`grid transition-all ${isResizing ? 'duration-0' : 'duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'} w-full overflow-hidden min-w-0 ${isCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100 mt-2'}`}
                 >
                     <div className="min-h-0 min-w-0 relative z-10 transition-all duration-300">
                         <div
@@ -2443,9 +2605,10 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
                         />
                     </div>
                 </div>
+            </div>
 
                 {/* Y-Axis Resize Handle (Main Dashboard Only) */}
-                {!isMapMaximized && !isCollapsed && (
+                {!isMapMaximized && !isCollapsed && !isColorTuningPreview && (
                     <Tooltip text="DRAG TO RESIZE | DOUBLE-CLICK TO RESET" position="top" delay={300}>
                         <div
                             className={`absolute bottom-0 left-4 right-4 h-3 flex justify-center items-center cursor-row-resize group/resize-handle z-[60]`}
@@ -2463,6 +2626,150 @@ export const TelemetryChart = React.memo<TelemetryChartProps>(({
                     </Tooltip>
                 )}
             </div>
+
+            {/* Live Color Tuning Focus Modal */}
+            {showColorPicker && createPortal(
+                <div
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        closeColorPickerModal();
+                    }}
+                    className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 transition-all duration-300 ease-out ${
+                        modalMounted && !isColorPickerClosing
+                            ? 'bg-black/85 backdrop-blur-md opacity-100'
+                            : 'bg-black/0 backdrop-blur-none opacity-0 pointer-events-none'
+                    }`}
+                >
+                    {/* Big Single Modal Frame Container */}
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        className={`w-full max-w-3xl bg-[#141417] border border-purple-500/30 rounded-2xl p-5 shadow-[0_0_60px_rgba(168,85,247,0.35)] flex flex-col gap-4 relative z-[10000] transition-all duration-300 cubic-bezier(0.16,1,0.3,1) transform ${
+                            modalMounted && !isColorPickerClosing
+                                ? 'opacity-100 scale-100 translate-y-0'
+                                : 'opacity-0 scale-90 translate-y-4'
+                        }`}
+                    >
+                        {/* Modal Header Bar inside the big frame */}
+                        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-sm" style={{ backgroundColor: color }} />
+                                <div className="flex items-center gap-2">
+                                    <h4 className="text-xs font-black uppercase text-white tracking-wider">Live Color Tuning:</h4>
+                                    <span className="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-md border" style={{ borderColor: getRGBA(color, 0.4), color: color, backgroundColor: getRGBA(color, 0.18) }}>
+                                        {alias || channel}
+                                    </span>
+                                </div>
+                            </div>
+                            <Tooltip text="Close Editor" position="bottom">
+                                <button
+                                    type="button"
+                                    onClick={closeColorPickerModal}
+                                    className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </Tooltip>
+                        </div>
+
+                        {/* Top Elevated Chart Live Preview Card inside the big frame */}
+                        <div className="bg-black/40 border border-purple-500/30 rounded-xl p-2 shadow-[0_0_30px_rgba(168,85,247,0.2)] overflow-hidden">
+                            <TelemetryChart
+                                channel={channel}
+                                alias={alias}
+                                color={color}
+                                height={170}
+                                syncKey={syncKey}
+                                unit={unit}
+                                showLapTime={showLapTime}
+                                isPlaying={isPlaying}
+                                wheelIndex={wheelIndex}
+                                customYMin={customYMin}
+                                customYMax={customYMax}
+                                isColorTuningPreview={true}
+                            />
+                        </div>
+
+                        {/* Bottom Docked Color Control Panel inside the big frame */}
+                        <div className="flex flex-col gap-3 pt-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Telemetry Color Presets</span>
+                                <span className="text-[11px] font-mono text-purple-300 font-bold tracking-wider">{color.toUpperCase()}</span>
+                            </div>
+
+                            {/* Preset Swatches */}
+                            <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
+                                {[
+                                    '#00aaff', '#00ff00', '#ff0000', '#ffaa00',
+                                    '#bf00ff', '#ff00ff', '#ffff00', '#00ff88',
+                                    '#ef4444', '#3b82f6', '#22d3ee', '#10b981'
+                                ].map(hex => (
+                                    <Tooltip key={hex} text={hex} position="top">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleColorChange(hex)}
+                                            className={`h-8 w-full rounded-xl border transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer shadow-md ${
+                                                color.toLowerCase() === hex.toLowerCase()
+                                                    ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-[#141417] border-white scale-105'
+                                                    : 'border-white/20 hover:border-white opacity-80 hover:opacity-100'
+                                            }`}
+                                            style={{ backgroundColor: hex }}
+                                        />
+                                    </Tooltip>
+                                ))}
+                            </div>
+
+                            {/* Custom Color Picker (matching SettingsOverlay style) & Footer Actions */}
+                            <div className="flex items-center justify-between border-t border-white/10 pt-3 mt-1">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider shrink-0">Custom Color:</span>
+                                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl p-1.5 shadow-inner">
+                                        <div
+                                            className="relative w-7 h-7 rounded-lg overflow-hidden border border-white/20 hover:border-white/50 transition-all flex-shrink-0 shadow-md cursor-pointer"
+                                            style={{ boxShadow: `0 0 10px ${color}50` }}
+                                        >
+                                            <input
+                                                type="color"
+                                                value={color}
+                                                onChange={(e) => handleColorChange(e.target.value)}
+                                                className="absolute inset-[-6px] w-[calc(100%+12px)] h-[calc(100%+12px)] cursor-pointer bg-transparent border-none appearance-none"
+                                            />
+                                            <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: color }} />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={color}
+                                            onChange={(e) => handleColorChange(e.target.value)}
+                                            className="bg-transparent text-xs font-mono text-white w-20 uppercase outline-none px-1 tracking-wider"
+                                            placeholder="#HEX"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <Tooltip text="Reset to default channel color" position="top">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleColorReset()}
+                                            className="flex items-center gap-1.5 px-3.5 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-xl text-xs font-bold transition-all border border-white/10 cursor-pointer active:scale-95"
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5 text-purple-400" />
+                                            <span>Reset Color</span>
+                                        </button>
+                                    </Tooltip>
+                                    <button
+                                        type="button"
+                                        onClick={closeColorPickerModal}
+                                        className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.4)] cursor-pointer active:scale-95"
+                                    >
+                                        Done
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 });

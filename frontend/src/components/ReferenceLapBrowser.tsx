@@ -6,7 +6,7 @@ import { Search, History, MapPin, X, Loader2, Calendar, ChevronRight, ChevronDow
 import { handleGlassMouseMove } from '../utils/glassEffect';
 import { Tooltip } from './ui/Tooltip';
 import { getBrandLogoPath } from '../utils/carHelpers';
-import { getCountryFlagPath, getCountryFromTrackName } from '../utils/trackHelpers';
+import { getCountryFlagPath, getCountryFromTrackName, isShareCompatible } from '../utils/trackHelpers';
 import { extractLapTimeSeconds } from './CommunitySharesPanel';
 
 interface ReferenceLapBrowserProps {
@@ -64,34 +64,6 @@ export const ReferenceLapBrowser: React.FC<ReferenceLapBrowserProps> = ({ onClos
         return 'lmgt3-telemetry-sharing';
     };
 
-    const isTrackCompatible = (currentTrack: string, shareTitle: string) => {
-        const clean = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const t1 = clean(currentTrack);
-        const t2 = clean(shareTitle);
-        
-        if (t2.includes(t1)) return true;
-        
-        const aliases: Record<string, string[]> = {
-            'interlagos': ['josecarlospace', 'josécarlospace', 'pace', 'interlagos'],
-            'autodromojosecarlospace': ['interlagos', 'josecarlospace', 'pace'],
-            'monza': ['monza'],
-            'spa': ['spa', 'francorchamps'],
-            'lemans': ['sarthe', 'lemans', 'le-mans'],
-            'sebring': ['sebring'],
-            'fuji': ['fuji'],
-            'bahrain': ['sakhir', 'bahrain']
-        };
-        
-        for (const [key, list] of Object.entries(aliases)) {
-            const currentMatchesKey = t1.includes(key) || list.some(l => t1.includes(l));
-            if (currentMatchesKey) {
-                const shareMatchesKey = t2.includes(key) || list.some(l => t2.includes(l));
-                if (shareMatchesKey) return true;
-            }
-        }
-        return false;
-    };
-
     useEffect(() => {
         if (sessionMetadata) {
             setIsLoadingCommunity(true);
@@ -99,7 +71,12 @@ export const ReferenceLapBrowser: React.FC<ReferenceLapBrowserProps> = ({ onClos
             apiClient.listDiscordShares(targetChannel)
                 .then(res => {
                     const filtered = (res.shares || []).filter((s: any) => 
-                        isTrackCompatible(sessionMetadata.trackName, s.title)
+                        isShareCompatible(
+                            sessionMetadata.trackName,
+                            sessionMetadata.trackLayout || '',
+                            sessionMetadata.carClass,
+                            s.title
+                        )
                     );
                     setCommunityShares(filtered);
                     setIsLoadingCommunity(false);

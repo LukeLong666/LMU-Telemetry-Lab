@@ -1,3 +1,79 @@
+## 🟢 [2026-09-12] Telemetry v1.5.3 - 油溫水溫通道、Community Share 載入優化與 Custom Chart Beta 畫布
+
+### 🌟 核心突破
+* **油溫與水溫遙測通道 (Engine Oil & Water Temp Channels)**：於 `Systems` 通道分類導入 `Engine Oil Temp` (油溫, `°C`) 與 `Engine Water Temp` (水溫, `°C`) 遙測通道，完整支援溫標切換與雙圈疊加對比分析。
+* **Community Share 載入速度大幅優化 (Community Share Loading Speedup)**：後端 Discord 服務整合 `ThreadPoolExecutor(max_workers=10)` 並列抓取，並打造 `_shares_cache` (60s TTL) 與 `_member_cache` (15m TTL) 雙層 Thread-Safe 快取機制，將社群共享單圈載入反應時間降至毫秒級。
+* **Custom Chart Beta 畫布與 Y 軸範圍自訂 (Custom Chart Beta Scratchpad & Y-Axis Limits)**：設計全新 `CustomBetaCanvas.tsx` 草稿畫布測試場，支援空白頁面自選 Modal 頻道庫，並為每個卡片獨立提供 Y 軸 `Min` / `Max` 上下限輸入框與 `Reset` 自動縮放，完整持久化於 `localStorage`。
+
+### 🚀 專案影響
+* v1.5.3 實現了更完整的車輛引擎物理數據監控，並解決了社群單圈共享加載延遲問題，更引進了具備高度彈性的 Custom Beta 畫布與獨立 Y 軸縮放限制。
+
+🟢 [2026-09-12] Telemetry v1.5.3 - Oil/Water Temp Channels, Community Share Speedup & Custom Chart Beta Canvas
+
+### 🌟 Key Breakthroughs
+* **Engine Oil & Water Temperature Channels**: Integrated `Engine Oil Temp` and `Engine Water Temp` telemetry channels under `Systems` category formatted in `°C` with full dual-lap comparison support.
+* **Community Share Loading Speedup**: Overhauled Discord service backend with `ThreadPoolExecutor(max_workers=10)` parallel fetching and a dual-layer thread-safe cache (`60s` shares TTL, `15m` member TTL), accelerating reference lap browsing from seconds to milliseconds.
+* **Custom Chart Beta Canvas & Custom Y-Axis Limits**: Implemented `CustomBetaCanvas.tsx` featuring a blank scratchpad layout with modal channel picker and independent per-chart Y-axis `Min`/`Max` limits with reset capabilities, persisted in `localStorage`.
+
+### 🚀 Project Impact
+* v1.5.3 brings comprehensive thermal telemetry analysis, ultra-fast community reference browsing, and a flexible custom chart scratchpad environment.
+
+---
+
+## 🟢 [2026-08-14] Telemetry v1.5.2 - 自訂圖表佈局重開 App 異常通道自動復原修復
+
+### 🌟 核心突破
+* **自訂圖表佈局重開 App 未勾選通道防浮現修復 (Custom Chart Default Visibility Hotfix)**：修復在 `chartLayoutMode` 設為 `custom` 時，重開 App / 重新整理時未勾選的圖表通道會因範本 fallback 預設值 (`visible: true`) 而自動暴增出現的 Bug。
+  - 統一於 `telemetryStore.ts` 導出 `getCustomMasterChartConfigs()`，僅將主駕駛圖表 (`DEFAULT_CHARTS`) 設為預設顯示，其餘進階通道在未點擊時預設保持隱藏 (`visible: false`)。
+  - 徹底同步 Store 初始化、`refreshCustomChartConfigs()` 以及 `SettingsOverlay.tsx` 之 `displayCharts` 計算邏輯。
+
+### 🚀 專案影響
+* v1.5.2 緊急修復了自訂圖表佈局在重啟 App 時的圖表通道持久化覆蓋問題，確保車手的自訂佈局完全符合勾選偏好，維持簡潔流暢的遙測介面。
+
+🟢 [2026-08-14] Telemetry v1.5.2 - Custom Chart Stack Default Visibility Hotfix
+
+### 🌟 Key Breakthroughs
+* **Custom Chart Stack Default Visibility Hotfix**: Fixed a critical bug where restarting or refreshing the app in `custom` layout mode caused unchecked telemetry channels to flood the UI due to template fallback values (`visible: true`).
+  - Unified custom master config resolution with `getCustomMasterChartConfigs()`, setting only core driver channels (`DEFAULT_CHARTS`) to default visible, while keeping secondary channels hidden (`visible: false`) unless explicitly toggled by the user.
+  - Fully synchronized store initialization, `refreshCustomChartConfigs()`, and `SettingsOverlay.tsx` display chart calculation pipeline.
+
+### 🚀 Project Impact
+* v1.5.2 delivers an urgent hotfix for custom chart stack persistence, ensuring that custom telemetry layouts strictly reflect user channel selections across application restarts.
+
+---
+
+## 🟢 [2026-08-14] Telemetry v1.5.1 - 自訂圖表佈局、右鍵平移、Pitch/Roll 物理算式與一鍵自動更新
+
+### 🌟 核心突破
+* **Settings 自訂圖表佈局與全域拖曳排序 (Custom Chart Stack & Drag-and-Drop Reordering)**：在 Settings 內建 `Preset Tabs` 與 `Custom (All-in-One)` 模式切換。Custom 模式下支援跨類別全圖表 Master 清單勾選、線條顏色自訂，以及自由垂直拖曳排序，全域 Store (`telemetryStore.ts`) 自動持久化 `chartLayoutMode`。勾選單能依據 Merged / Split 模式動態回應顯示通道，並在單一頻道時智慧隱藏 Merge 按鈕。
+* **新增 Pitch Angle 與 Roll Angle 計算圖表 (Pitch & Roll Angle Telemetry Channels)**：於 Dynamics 分類與 Master 清單加入 `Pitch Angle (Calc)` 與 `Roll Angle (Calc)` 通道。採用底盤懸吊前後/左右高度差（Ride Height）之幾何三角算式計算即時俯仰角與滾轉角（$\text{deg}$），採 2 位小數格式化，完整支援雙圈動態對比。
+* **右鍵拖曳平移放大視窗 (Right-Click Drag Panning)**：在遙測圖表放大 (`zoomRange`) 視角下，支援滑鼠右鍵左右拖曳平移當前放大視窗。全圖表實時同步聯動，具備 `[0, Max]` 邊界保護與原生右鍵選單攔截。
+* **Workspace Selector 拖曳排序與預設啟動設定 (Workspace Reordering & Launch Default)**：為 Workspace 選擇視窗加入 Drag & Drop 拖曳排序功能，垂直化操作按鈕，並自動將最上方（Index 0）的 Workspace 設為 App 啟動時的預設 Workspace (`is_default = true`)。
+* **Daytona 特長賽道全螢幕負半徑崩潰修復 (Daytona Maximum Negative Radius Crash Fix)**：修復地圖於全螢幕或縮放過渡中矩陣縮放係數負值導致 Canvas `arc()` 拋出負半徑 `DOMException` (SYSTEM FAULT) 的 Bug，透過安全值封裝確保高解析度全螢幕極致穩定。
+* **Reference Lap 社群單圈精確相容與一鍵無縫更新 (Strict Track Compatibility & One-Click Auto-Update)**：
+  - 重構賽道識別邏輯（`getCanonicalTrackId` 與 `isShareCompatible`），導入 3 重嚴格比對（Track + Layout 變體 + Car Class），徹底排除如 `josecarlospace` 因內含 `spa` 字母導致跨賽道誤匹配的問題。
+  - 打造 Electron 流式背景下載器與發光 UI 進度條，結合 NSIS 安裝精靈與 PowerShell 重啟器，實現點擊「一鍵下載安裝」後自動下載、安裝覆蓋並重新開啟 App 的全自動更新體驗。
+
+### 🚀 專案影響
+* v1.5.1 為 Telemetry Lab 帶來了高度自訂化的圖表配置、幾何角度運算與右鍵平移操控，並修復了特長賽道全螢幕崩潰與社群單圈比對漏洞。配合全自動下載安裝更新系統，讓車手的遙測分析體驗更加強大、流暢與直覺。
+
+🟢 [2026-08-14] Telemetry v1.5.1 - Custom Chart Stack, Right-Click Drag Panning, Pitch/Roll Physics & One-Click Auto-Update
+
+### 🌟 Key Breakthroughs
+* **Custom Chart Stack & Drag-and-Drop Reordering**: Integrated `Preset Tabs` and `Custom (All-in-One)` layout modes inside Settings. In Custom mode, users can toggle any telemetry channel across categories, customize trace colors, and freely reorder charts via vertical drag-and-drop. The store automatically persists `chartLayoutMode`, and checklist items dynamically react to Merged/Split channel modes while hiding unnecessary Merge buttons.
+* **Pitch & Roll Angle Telemetry Channels**: Added `Pitch Angle (Calc)` and `Roll Angle (Calc)` to the Dynamics category and Master config. Calculates real-time pitch and roll angles ($\text{deg}$) using ride height differences and suspension geometry, formatted to 2 decimal places with full dual-lap comparison support.
+* **Right-Click Drag Panning**: Introduced right-click drag panning across zoomed telemetry charts (`zoomRange`). Users can right-click and drag horizontally to smoothly pan the zoom window left or right in real-time across all synchronized charts with `[0, Max]` boundary protection.
+* **Workspace Drag-and-Drop Reordering & Launch Default**: Added intuitive Drag & Drop reordering to the Workspace Selector with vertically aligned action buttons. Automatically designates the top workspace (Index 0) as the application launch default (`is_default = true`).
+* **Daytona Maximum Canvas Negative Radius Crash Fix**: Fixed a system crash (`DOMException`) caused by negative scaling matrix coefficients producing negative radius values in Canvas `arc()` calls during fullscreen transitions on long tracks like Daytona.
+* **Strict Reference Lap Compatibility & One-Click Auto-Update**:
+  - Overhauled track matching logic (`getCanonicalTrackId` & `isShareCompatible`) with 3-stage validation (Track + Layout Variant + Car Class) to completely eliminate substring false matches (such as `josecarlospace` matching `spa`).
+  - Built an Electron background stream downloader with real-time UI progress bar (`MB/s`, `%`) and installer execution pipeline to download, install, and relaunch the application seamlessly upon clicking "Auto-Update".
+
+### 🚀 Project Impact
+* v1.5.1 elevates Telemetry Lab with high-fidelity custom chart stacking, mathematical suspension pitch/roll channels, right-click drag panning, and strict reference lap matching. Coupled with the one-click auto-update engine, it delivers an ultra-smooth, engineering-grade telemetry experience.
+
+---
+
 ## 🟢 [2026-08-02] Telemetry v1.5.0 - 微區段深度分析、G-Force 實時雷達與 Discord 共享生態系
 
 ### 🌟 核心突破

@@ -36,6 +36,19 @@ export const findMappedCarModel = (rawName: string | undefined, mappings: Record
     return matchedKey ? mappings[matchedKey] : undefined;
 };
 
+export const getStableChartKey = (config: { id: string; wheelIndex?: number }): string => {
+    const id = config.id;
+    const wIdx = config.wheelIndex;
+    if (id === 'PedalsMerged' || id === 'Throttle Pos') return 'group-anchor-pedals';
+    if (id === 'RideHeights' || id === 'FrontRideHeight') return 'group-anchor-ride-heights';
+    if (id === 'ThirdDeflectionMerged' || id === 'Front3rdDeflection') return 'group-anchor-third-deflection';
+    if (id === 'HandlingMerged' || (id === 'Yaw Rate' && wIdx === undefined)) return 'group-anchor-handling';
+    if (id === 'TyresPressure' && (wIdx === undefined || wIdx === 0)) return 'group-anchor-tyres-pressure';
+    if (id === 'Slip Ratio' && (wIdx === undefined || wIdx === 0)) return 'group-anchor-slip-ratio';
+    if (id === 'SuspPosFront' || (id === 'Susp Pos' && (wIdx === undefined || wIdx === 0))) return 'group-anchor-suspension';
+    return `${id}-${wIdx ?? 'none'}`;
+};
+
 export const getPlaybackTimeRange = (state: any) => {
     const { selectedSegIdx, selectedSectorIdx, miniSectorState, telemetryData, laps, selectedLapIdx } = state;
     
@@ -288,6 +301,23 @@ export interface TelemetryState {
     activeChartCategory: ChartCategory;
     chartLayoutMode: 'preset' | 'custom';
 
+    // Custom Chart Beta Testbed
+    isCustomBetaMode: boolean;
+    customBetaChartConfigs: ChartConfig[];
+    customYAxisSettings: Record<string, { min?: number; max?: number }>;
+    toggleCustomBetaMode: () => void;
+    setCustomBetaChartConfigs: (configs: ChartConfig[]) => void;
+    resetCustomBetaChartConfigs: () => void;
+    moveCustomBetaChartChannel: (index: number, direction: 'up' | 'down') => void;
+    reorderCustomBetaChartConfigs: (startIndex: number, endIndex: number) => void;
+    moveStandardChartChannel: (chartKey: string, direction: 'up' | 'down') => void;
+    reorderStandardChartConfigs: (startIndex: number, endIndex: number) => void;
+    setCustomYAxisLimits: (chartKey: string, min?: number, max?: number) => void;
+    addCustomBetaChartChannel: (config: ChartConfig) => void;
+    removeCustomBetaChartChannel: (chartKey: string) => void;
+    updateCustomBetaChartChannelColor: (chartKey: string, newColor: string) => void;
+    resetCustomBetaChartChannelColor: (chartKey: string) => void;
+
     // Actions
     setChartLayoutMode: (mode: 'preset' | 'custom') => void;
     refreshCustomChartConfigs: () => void;
@@ -440,6 +470,8 @@ export const CATEGORY_CHART_CONFIGS: Record<ChartCategory, ChartConfig[]> = {
         { id: 'ABS', alias: 'ABS Active', color: '#38bdf8', visible: true, order: 1, height: 120 },
         { id: 'SoC', alias: 'Hybrid SoC', color: '#10b981', visible: true, order: 2, height: 120, unit: 'MJ' },
         { id: 'Fuel Level', alias: 'Fuel Level', color: '#facc15', visible: true, order: 3, height: 120, unit: 'L' },
+        { id: 'Engine Oil Temp', alias: 'Oil Temp', color: '#f97316', visible: true, order: 4, height: 140, unit: '°C' },
+        { id: 'Engine Water Temp', alias: 'Water Temp', color: '#06b6d4', visible: true, order: 5, height: 140, unit: '°C' },
     ]
 };
 
@@ -515,6 +547,216 @@ const DEFAULT_OVERLAP_CONFIG_MAXIMIZED = {
     current: { x: 38, y: 85 },
     reference: { x: 62, y: 85 },
     scale: 1.0
+};
+
+const saveChannelColor = (key: string, color: string) => {
+    try {
+        const saved = JSON.parse(localStorage.getItem('channel_colors') || '{}');
+        saved[key] = color;
+        localStorage.setItem('channel_colors', JSON.stringify(saved));
+    } catch {}
+};
+
+const getSavedColor = (id: string, wheelIndex?: number, fallbackColor: string = '#3b82f6'): string => {
+    try {
+        const key = `${id}-${wheelIndex ?? 'all'}`;
+        const savedColors = JSON.parse(localStorage.getItem('channel_colors') || '{}');
+        if (savedColors[key]) return savedColors[key];
+
+        const mode = (localStorage.getItem('chart_layout_mode') as string) || 'preset';
+        const storageKey = mode === 'custom' ? 'custom_chart_settings' : 'preset_chart_settings';
+        const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+        if (saved[key] && saved[key].color) return saved[key].color;
+    } catch {}
+    return fallbackColor;
+};
+
+export const transformViewModeConfigs = (
+    configs: ChartConfig[],
+    targetType: 'pedals' | 'suspension' | 'thirdDeflection' | 'handling' | 'tyresPressure' | 'rideHeight' | 'slipRatio',
+    newMode: 'split' | 'merged'
+): ChartConfig[] => {
+    let result = [...configs];
+
+    if (targetType === 'pedals') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'Throttle Pos' || c.id === 'Brake Pos');
+            if (hasSplit) {
+                result = result.filter(c => c.id !== 'Throttle Pos' && c.id !== 'Brake Pos');
+                if (!result.some(c => c.id === 'PedalsMerged')) {
+                    result.push({
+                        id: 'PedalsMerged',
+                        alias: 'Throttle / Brake',
+                        color: getSavedColor('PedalsMerged', undefined, '#00ff00'),
+                        visible: true,
+                        order: 2,
+                        height: 140,
+                        unit: '%'
+                    });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'PedalsMerged');
+            if (hasMerged) {
+                result = result.filter(c => c.id !== 'PedalsMerged');
+                if (!result.some(c => c.id === 'Throttle Pos')) {
+                    result.push({ id: 'Throttle Pos', alias: 'Throttle', color: getSavedColor('Throttle Pos', undefined, '#00ff00'), visible: true, order: 2, height: 120, unit: '%' });
+                }
+                if (!result.some(c => c.id === 'Brake Pos')) {
+                    result.push({ id: 'Brake Pos', alias: 'Brake', color: getSavedColor('Brake Pos', undefined, '#ff0000'), visible: true, order: 3, height: 120, unit: '%' });
+                }
+            }
+        }
+    } else if (targetType === 'suspension') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'Susp Pos');
+            if (hasSplit) {
+                result = result.filter(c => c.id !== 'Susp Pos');
+                if (!result.some(c => c.id === 'SuspPosFront')) {
+                    result.push({ id: 'SuspPosFront', alias: 'Front Susp (L/R)', color: getSavedColor('SuspPosFront', undefined, '#3b82f6'), visible: true, order: 0, height: 160, unit: 'mm' });
+                }
+                if (!result.some(c => c.id === 'SuspPosRear')) {
+                    result.push({ id: 'SuspPosRear', alias: 'Rear Susp (L/R)', color: getSavedColor('SuspPosRear', undefined, '#ef4444'), visible: true, order: 1, height: 160, unit: 'mm' });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'SuspPosFront' || c.id === 'SuspPosRear');
+            if (hasMerged) {
+                result = result.filter(c => c.id !== 'SuspPosFront' && c.id !== 'SuspPosRear');
+                const splitSusp = [
+                    { id: 'Susp Pos', alias: 'FL Susp', color: getSavedColor('Susp Pos', 0, '#3b82f6'), visible: true, order: 0, height: 120, unit: 'mm', wheelIndex: 0 },
+                    { id: 'Susp Pos', alias: 'FR Susp', color: getSavedColor('Susp Pos', 1, '#ef4444'), visible: true, order: 1, height: 120, unit: 'mm', wheelIndex: 1 },
+                    { id: 'Susp Pos', alias: 'RL Susp', color: getSavedColor('Susp Pos', 2, '#3b82f6'), visible: true, order: 2, height: 120, unit: 'mm', wheelIndex: 2 },
+                    { id: 'Susp Pos', alias: 'RR Susp', color: getSavedColor('Susp Pos', 3, '#ef4444'), visible: true, order: 3, height: 120, unit: 'mm', wheelIndex: 3 },
+                ];
+                splitSusp.forEach(s => {
+                    if (!result.some(c => c.id === s.id && c.wheelIndex === s.wheelIndex)) {
+                        result.push(s);
+                    }
+                });
+            }
+        }
+    } else if (targetType === 'thirdDeflection') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'Front3rdDeflection' || c.id === 'Rear3rdDeflection');
+            if (hasSplit) {
+                result = result.filter(c => c.id !== 'Front3rdDeflection' && c.id !== 'Rear3rdDeflection');
+                if (!result.some(c => c.id === 'ThirdDeflectionMerged')) {
+                    result.push({ id: 'ThirdDeflectionMerged', alias: '3rd Deflection (F/R)', color: getSavedColor('ThirdDeflectionMerged', undefined, '#22d3ee'), visible: true, order: 5, height: 160, unit: 'mm' });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'ThirdDeflectionMerged');
+            if (hasMerged) {
+                result = result.filter(c => c.id !== 'ThirdDeflectionMerged');
+                if (!result.some(c => c.id === 'Front3rdDeflection')) {
+                    result.push({ id: 'Front3rdDeflection', alias: 'Front 3rd Deflection', color: getSavedColor('Front3rdDeflection', undefined, '#10b981'), visible: true, order: 6, height: 120, unit: 'mm' });
+                }
+                if (!result.some(c => c.id === 'Rear3rdDeflection')) {
+                    result.push({ id: 'Rear3rdDeflection', alias: 'Rear 3rd Deflection', color: getSavedColor('Rear3rdDeflection', undefined, '#f59e0b'), visible: true, order: 7, height: 120, unit: 'mm' });
+                }
+            }
+        }
+    } else if (targetType === 'handling') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'Yaw Rate' || c.id === 'Steering Angle');
+            if (hasSplit) {
+                result = result.filter(c => c.id !== 'Yaw Rate' && c.id !== 'Steering Angle');
+                if (!result.some(c => c.id === 'HandlingMerged')) {
+                    result.push({ id: 'HandlingMerged', alias: 'Yaw vs Steering', color: getSavedColor('HandlingMerged', undefined, '#f43f5e'), visible: true, order: 1, height: 180, unit: 'mixed' });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'HandlingMerged');
+            if (hasMerged) {
+                result = result.filter(c => c.id !== 'HandlingMerged');
+                if (!result.some(c => c.id === 'Yaw Rate')) {
+                    result.push({ id: 'Yaw Rate', alias: 'Yaw Rate', color: getSavedColor('Yaw Rate', undefined, '#3b82f6'), visible: true, order: 1, height: 120, unit: 'deg/s' });
+                }
+                if (!result.some(c => c.id === 'Steering Angle')) {
+                    result.push({ id: 'Steering Angle', alias: 'Steering Angle', color: getSavedColor('Steering Angle', undefined, '#a855f7'), visible: true, order: 2, height: 120, unit: 'deg' });
+                }
+            }
+        }
+    } else if (targetType === 'tyresPressure') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'TyresPressure' && c.wheelIndex !== undefined);
+            if (hasSplit) {
+                result = result.filter(c => !(c.id === 'TyresPressure' && c.wheelIndex !== undefined));
+                if (!result.some(c => c.id === 'TyresPressure' && c.wheelIndex === undefined)) {
+                    result.push({ id: 'TyresPressure', alias: 'Tyre Pressures', color: getSavedColor('TyresPressure', undefined, '#3b82f6'), visible: true, order: 4, height: 160, unit: 'kPa' });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'TyresPressure' && c.wheelIndex === undefined);
+            if (hasMerged) {
+                result = result.filter(c => !(c.id === 'TyresPressure' && c.wheelIndex === undefined));
+                const splitPressures = [
+                    { id: 'TyresPressure', alias: 'FL Pressure', color: getSavedColor('TyresPressure', 0, '#3b82f6'), visible: true, order: 4.1, height: 120, unit: 'kPa', wheelIndex: 0 },
+                    { id: 'TyresPressure', alias: 'FR Pressure', color: getSavedColor('TyresPressure', 1, '#ef4444'), visible: true, order: 4.2, height: 120, unit: 'kPa', wheelIndex: 1 },
+                    { id: 'TyresPressure', alias: 'RL Pressure', color: getSavedColor('TyresPressure', 2, '#3b82f6'), visible: true, order: 4.3, height: 120, unit: 'kPa', wheelIndex: 2 },
+                    { id: 'TyresPressure', alias: 'RR Pressure', color: getSavedColor('TyresPressure', 3, '#ef4444'), visible: true, order: 4.4, height: 120, unit: 'kPa', wheelIndex: 3 },
+                ];
+                splitPressures.forEach(p => {
+                    if (!result.some(c => c.id === p.id && c.wheelIndex === p.wheelIndex)) {
+                        result.push(p);
+                    }
+                });
+            }
+        }
+    } else if (targetType === 'rideHeight') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'RideHeights' && c.wheelIndex !== undefined);
+            if (hasSplit) {
+                result = result.filter(c => !(c.id === 'RideHeights' && c.wheelIndex !== undefined));
+                if (!result.some(c => c.id === 'RideHeights' && c.wheelIndex === undefined)) {
+                    result.push({ id: 'RideHeights', alias: 'Ride Heights (F/R)', color: getSavedColor('RideHeights', undefined, '#00aaff'), visible: true, order: 4, height: 160, unit: 'mm' });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'RideHeights' && c.wheelIndex === undefined);
+            if (hasMerged) {
+                result = result.filter(c => !(c.id === 'RideHeights' && c.wheelIndex === undefined));
+                const splitRH = [
+                    { id: 'RideHeights', alias: 'Front Ride Height', color: getSavedColor('RideHeights', 0, '#00aaff'), visible: true, order: 4.1, height: 120, unit: 'mm', wheelIndex: 0 },
+                    { id: 'RideHeights', alias: 'Rear Ride Height', color: getSavedColor('RideHeights', 1, '#fb923c'), visible: true, order: 4.2, height: 120, unit: 'mm', wheelIndex: 1 },
+                ];
+                splitRH.forEach(r => {
+                    if (!result.some(c => c.id === r.id && c.wheelIndex === r.wheelIndex)) {
+                        result.push(r);
+                    }
+                });
+            }
+        }
+    } else if (targetType === 'slipRatio') {
+        if (newMode === 'merged') {
+            const hasSplit = result.some(c => c.id === 'Slip Ratio' && c.wheelIndex !== undefined);
+            if (hasSplit) {
+                result = result.filter(c => !(c.id === 'Slip Ratio' && c.wheelIndex !== undefined));
+                if (!result.some(c => c.id === 'Slip Ratio' && c.wheelIndex === undefined)) {
+                    result.push({ id: 'Slip Ratio', alias: 'Slip Ratio (Calculated)', color: getSavedColor('Slip Ratio', undefined, '#00ff88'), visible: true, order: 0, height: 160, unit: '%' });
+                }
+            }
+        } else {
+            const hasMerged = result.some(c => c.id === 'Slip Ratio' && c.wheelIndex === undefined);
+            if (hasMerged) {
+                result = result.filter(c => !(c.id === 'Slip Ratio' && c.wheelIndex === undefined));
+                const splitSlip = [
+                    { id: 'Slip Ratio', alias: 'FL Slip', color: getSavedColor('Slip Ratio', 0, '#3b82f6'), visible: true, order: 5.1, height: 120, unit: '%', wheelIndex: 0 },
+                    { id: 'Slip Ratio', alias: 'FR Slip', color: getSavedColor('Slip Ratio', 1, '#ef4444'), visible: true, order: 5.2, height: 120, unit: '%', wheelIndex: 1 },
+                    { id: 'Slip Ratio', alias: 'RL Slip', color: getSavedColor('Slip Ratio', 2, '#3b82f6'), visible: true, order: 5.3, height: 120, unit: '%', wheelIndex: 2 },
+                    { id: 'Slip Ratio', alias: 'RR Slip', color: getSavedColor('Slip Ratio', 3, '#ef4444'), visible: true, order: 5.4, height: 120, unit: '%', wheelIndex: 3 },
+                ];
+                splitSlip.forEach(s => {
+                    if (!result.some(c => c.id === s.id && c.wheelIndex === s.wheelIndex)) {
+                        result.push(s);
+                    }
+                });
+            }
+        }
+    }
+
+    return result;
 };
 
 export const getCategoryTemplateConfigs = (category: ChartCategory, state: {
@@ -672,6 +914,24 @@ export const getAllMasterChartConfigs = (state: TelemetryState): ChartConfig[] =
     return list;
 };
 
+export const getCustomMasterChartConfigs = (state: TelemetryState | any): ChartConfig[] => {
+    const master = getAllMasterChartConfigs(state);
+    const custom = (() => { try { return JSON.parse(localStorage.getItem('custom_chart_settings') || '{}'); } catch { return {}; } })();
+    const defaultIds = new Set(DEFAULT_CHARTS.map(c => `${c.id}-${c.wheelIndex ?? 'all'}`));
+
+    return master.map((c, i) => {
+        const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
+        const isDefault = defaultIds.has(key);
+        const saved = custom[key];
+        return {
+            ...c,
+            ...saved,
+            order: saved?.order !== undefined ? saved.order : (c.order ?? i),
+            visible: saved?.visible !== undefined ? saved.visible : (isDefault ? (c.visible ?? true) : false)
+        };
+    }).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+};
+
 export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     sessions: [],
     currentSessionId: null,
@@ -722,35 +982,17 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const savedMode = localStorage.getItem('chart_layout_mode');
         if (savedMode !== 'custom') return DEFAULT_CHARTS;
 
-        // Reconstruct master list using the same view-mode settings from localStorage
-        // (mirrors getAllMasterChartConfigs but without a full state object)
         const fakeState = {
-            suspensionViewMode: (localStorage.getItem('suspension_view_mode') as 'raw' | 'relative') || 'raw',
+            suspensionViewMode: (localStorage.getItem('suspension_view_mode') as 'split' | 'merged') || 'split',
             thirdDeflectionViewMode: (localStorage.getItem('third_deflection_view_mode') as 'split' | 'merged') || 'split',
             handlingViewMode: (localStorage.getItem('handling_view_mode') as 'split' | 'merged') || 'split',
-            tyresPressureViewMode: (localStorage.getItem('tyres_pressure_view_mode') as 'split' | 'merged') || 'split',
-            rideHeightViewMode: (localStorage.getItem('ride_height_view_mode') as 'split' | 'merged') || 'split',
+            tyresPressureViewMode: (localStorage.getItem('tyres_pressure_view_mode') as 'split' | 'merged') || 'merged',
+            rideHeightViewMode: (localStorage.getItem('ride_height_view_mode') as 'split' | 'merged') || 'merged',
+            slipRatioViewMode: (localStorage.getItem('slip_ratio_view_mode') as 'split' | 'merged') || 'merged',
+            pedalsViewMode: (localStorage.getItem('pedals_view_mode') as 'split' | 'merged') || 'split',
         } as any;
 
-        const list: ChartConfig[] = [];
-        const seen = new Set<string>();
-        const addConfig = (c: ChartConfig) => {
-            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
-            if (!seen.has(key)) { seen.add(key); list.push(c); }
-        };
-
-        (Object.keys(CATEGORY_CHART_CONFIGS) as ChartCategory[]).forEach(cat => {
-            const templateConfigs = getCategoryTemplateConfigs(cat, fakeState);
-            templateConfigs.forEach(addConfig);
-        });
-        addConfig({ id: 'Pitch', alias: 'Pitch Angle (Calc)', color: '#a855f7', visible: true, order: 6.5, height: 120, unit: 'deg' });
-        addConfig({ id: 'Roll', alias: 'Roll Angle (Calc)', color: '#ec4899', visible: true, order: 6.6, height: 120, unit: 'deg' });
-
-        const custom = (() => { try { return JSON.parse(localStorage.getItem('custom_chart_settings') || '{}'); } catch { return {}; } })();
-        return list.map((c, i) => {
-            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
-            return custom[key] ? { ...c, ...custom[key] } : { ...c, order: c.order ?? i };
-        }).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        return getCustomMasterChartConfigs(fakeState);
     })(),
     chartPresets: [
         ...BUILT_IN_PRESETS,
@@ -823,6 +1065,167 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     activeChartCategory: 'Driver',
     chartLayoutMode: (localStorage.getItem('chart_layout_mode') as 'preset' | 'custom') || 'preset',
 
+    // Custom Chart Beta Testbed
+    isCustomBetaMode: false,
+    customBetaChartConfigs: JSON.parse(localStorage.getItem('custom_beta_chart_configs') || 'null') || [
+        { id: 'Ground Speed', alias: 'Speed', color: '#00aaff', visible: true, order: 0, height: 180, unit: 'km/h' },
+        { id: 'Throttle Pos', alias: 'Throttle', color: '#00ff00', visible: true, order: 1, height: 140, unit: '%' },
+        { id: 'Brake Pos', alias: 'Brake', color: '#ff0000', visible: true, order: 2, height: 140, unit: '%' },
+    ],
+    customYAxisSettings: JSON.parse(localStorage.getItem('custom_yaxis_settings') || '{}'),
+
+    toggleCustomBetaMode: () => set(state => ({ isCustomBetaMode: !state.isCustomBetaMode })),
+    setCustomBetaChartConfigs: (configs) => {
+        localStorage.setItem('custom_beta_chart_configs', JSON.stringify(configs));
+        set({ customBetaChartConfigs: configs });
+    },
+    resetCustomBetaChartConfigs: () => {
+        localStorage.removeItem('custom_beta_chart_configs');
+        localStorage.removeItem('custom_yaxis_settings');
+        const defaultConfigs: ChartConfig[] = [
+            { id: 'Ground Speed', alias: 'Speed', color: '#00aaff', visible: true, order: 0, height: 180, unit: 'km/h' },
+            { id: 'Throttle Pos', alias: 'Throttle', color: '#00ff00', visible: true, order: 1, height: 140, unit: '%' },
+            { id: 'Brake Pos', alias: 'Brake', color: '#ff0000', visible: true, order: 2, height: 140, unit: '%' },
+        ];
+        set({
+            customBetaChartConfigs: defaultConfigs,
+            customYAxisSettings: {}
+        });
+    },
+    setCustomYAxisLimits: (chartKey, min, max) => {
+        const current = get().customYAxisSettings;
+        const updated = {
+            ...current,
+            [chartKey]: { min, max }
+        };
+        localStorage.setItem('custom_yaxis_settings', JSON.stringify(updated));
+        set({ customYAxisSettings: updated });
+    },
+    addCustomBetaChartChannel: (config) => {
+        const current = get().customBetaChartConfigs;
+        const key = `${config.id}-${config.wheelIndex ?? 'all'}`;
+        if (current.some(c => `${c.id}-${c.wheelIndex ?? 'all'}` === key)) return;
+        const next = [...current, { ...config, visible: true, order: current.length }];
+        get().setCustomBetaChartConfigs(next);
+    },
+    removeCustomBetaChartChannel: (chartKey) => {
+        const current = get().customBetaChartConfigs;
+        const next = current.filter(c => `${c.id}-${c.wheelIndex ?? 'all'}` !== chartKey);
+        get().setCustomBetaChartConfigs(next);
+    },
+    moveCustomBetaChartChannel: (index, direction) => {
+        const current = [...get().customBetaChartConfigs];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= current.length) return;
+
+        const temp = current[index];
+        current[index] = current[targetIndex];
+        current[targetIndex] = temp;
+
+        current.forEach((c, idx) => { c.order = idx; });
+        get().setCustomBetaChartConfigs(current);
+    },
+    reorderCustomBetaChartConfigs: (startIndex, endIndex) => {
+        const current = [...get().customBetaChartConfigs];
+        if (startIndex < 0 || startIndex >= current.length || endIndex < 0 || endIndex >= current.length) return;
+
+        const [moved] = current.splice(startIndex, 1);
+        current.splice(endIndex, 0, moved);
+
+        current.forEach((c, idx) => { c.order = idx; });
+        get().setCustomBetaChartConfigs(current);
+    },
+    moveStandardChartChannel: (chartKey, direction) => {
+        const { chartConfigs } = get();
+        const visibleConfigs = chartConfigs
+            .filter(c => c.visible)
+            .sort((a, b) => a.order - b.order);
+
+        const idx = visibleConfigs.findIndex(c => `${c.id}-${c.wheelIndex ?? 'all'}` === chartKey);
+        if (idx === -1) return;
+        const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (targetIdx < 0 || targetIdx >= visibleConfigs.length) return;
+
+        const copy = [...visibleConfigs];
+        const temp = copy[idx];
+        copy[idx] = copy[targetIdx];
+        copy[targetIdx] = temp;
+
+        const orderMap = new Map<string, number>();
+        copy.forEach((c, newOrder) => {
+            orderMap.set(`${c.id}-${c.wheelIndex ?? 'all'}`, newOrder);
+        });
+
+        const nextChartConfigs = chartConfigs.map(c => {
+            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
+            if (orderMap.has(key)) {
+                return { ...c, order: orderMap.get(key)! };
+            }
+            return c;
+        });
+
+        set({ chartConfigs: nextChartConfigs.sort((a, b) => a.order - b.order) });
+    },
+    reorderStandardChartConfigs: (startIndex, endIndex) => {
+        const { chartConfigs } = get();
+        const visibleConfigs = chartConfigs
+            .filter(c => c.visible)
+            .sort((a, b) => a.order - b.order);
+
+        if (startIndex < 0 || startIndex >= visibleConfigs.length || endIndex < 0 || endIndex >= visibleConfigs.length) return;
+
+        const copy = [...visibleConfigs];
+        const [moved] = copy.splice(startIndex, 1);
+        copy.splice(endIndex, 0, moved);
+
+        const orderMap = new Map<string, number>();
+        copy.forEach((c, newOrder) => {
+            orderMap.set(`${c.id}-${c.wheelIndex ?? 'all'}`, newOrder);
+        });
+
+        const nextChartConfigs = chartConfigs.map(c => {
+            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
+            if (orderMap.has(key)) {
+                return { ...c, order: orderMap.get(key)! };
+            }
+            return c;
+        });
+
+        set({ chartConfigs: nextChartConfigs.sort((a, b) => a.order - b.order) });
+    },
+    updateCustomBetaChartChannelColor: (chartKey, newColor) => {
+        saveChannelColor(chartKey, newColor);
+        const current = get().customBetaChartConfigs;
+        const next = current.map(c => {
+            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
+            if (key === chartKey) {
+                return { ...c, color: newColor };
+            }
+            return c;
+        });
+        get().setCustomBetaChartConfigs(next);
+    },
+    resetCustomBetaChartChannelColor: (chartKey) => {
+        const current = get().customBetaChartConfigs;
+        let defaultColor = '#3b82f6';
+        for (const catConfigs of Object.values(CATEGORY_CHART_CONFIGS)) {
+            const found = catConfigs.find(c => `${c.id}-${c.wheelIndex ?? 'all'}` === chartKey);
+            if (found) {
+                defaultColor = found.color;
+                break;
+            }
+        }
+        saveChannelColor(chartKey, defaultColor);
+        const next = current.map(c => {
+            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
+            if (key === chartKey) {
+                return { ...c, color: defaultColor };
+            }
+            return c;
+        });
+        get().setCustomBetaChartConfigs(next);
+    },
+
     setChartLayoutMode: (mode) => {
         localStorage.setItem('chart_layout_mode', mode);
         set({ chartLayoutMode: mode });
@@ -834,17 +1237,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     },
     refreshCustomChartConfigs: () => {
         const state = get();
-        const master = getAllMasterChartConfigs(state);
-        const custom = JSON.parse(localStorage.getItem('custom_chart_settings') || '{}');
-        const merged = master.map((c, i) => {
-            const key = `${c.id}-${c.wheelIndex ?? 'all'}`;
-            if (custom[key]) {
-                return { ...c, ...custom[key] };
-            }
-            return { ...c, order: c.order ?? i };
-        }).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-        set({ chartConfigs: merged });
+        set({ chartConfigs: getCustomMasterChartConfigs(state) });
     },
 
     setShowCarSelection: (val) => set({ showCarSelection: val }),
@@ -1216,7 +1609,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const newMode = currentMode === 'split' ? 'merged' : 'split';
         localStorage.setItem('suspension_view_mode', newMode);
         set({ suspensionViewMode: newMode });
-        if (get().activeChartCategory === 'Dynamics') {
+        
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'suspension', newMode));
+        if (activeChartCategory === 'Dynamics') {
             get().setActiveChartCategory('Dynamics');
         }
     },
@@ -1225,7 +1621,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const newMode = currentMode === 'split' ? 'merged' : 'split';
         localStorage.setItem('third_deflection_view_mode', newMode);
         set({ thirdDeflectionViewMode: newMode });
-        if (get().activeChartCategory === 'Dynamics') {
+        
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'thirdDeflection', newMode));
+        if (activeChartCategory === 'Dynamics') {
             get().setActiveChartCategory('Dynamics');
         }
     },
@@ -1234,7 +1633,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const newMode = currentMode === 'split' ? 'merged' : 'split';
         localStorage.setItem('handling_view_mode', newMode);
         set({ handlingViewMode: newMode });
-        if (get().activeChartCategory === 'Handling') {
+        
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'handling', newMode));
+        if (activeChartCategory === 'Handling') {
             get().setActiveChartCategory('Handling');
         }
     },
@@ -1243,7 +1645,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const newMode = currentMode === 'split' ? 'merged' : 'split';
         localStorage.setItem('tyres_pressure_view_mode', newMode);
         set({ tyresPressureViewMode: newMode });
-        if (get().activeChartCategory === 'Tyres') {
+        
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'tyresPressure', newMode));
+        if (activeChartCategory === 'Tyres') {
             get().setActiveChartCategory('Tyres');
         }
     },
@@ -1252,7 +1657,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const newMode = currentMode === 'split' ? 'merged' : 'split';
         localStorage.setItem('ride_height_view_mode', newMode);
         set({ rideHeightViewMode: newMode });
-        if (get().activeChartCategory === 'Dynamics') {
+        
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'rideHeight', newMode));
+        if (activeChartCategory === 'Dynamics') {
             get().setActiveChartCategory('Dynamics');
         }
     },
@@ -1261,7 +1669,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         const newMode = currentMode === 'split' ? 'merged' : 'split';
         localStorage.setItem('slip_ratio_view_mode', newMode);
         set({ slipRatioViewMode: newMode });
-        const category = get().activeChartCategory;
+        
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'slipRatio', newMode));
+        const category = activeChartCategory;
         if (category === 'Tyres' || category === 'Handling') {
             get().setActiveChartCategory(category);
         }
@@ -1272,32 +1683,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         localStorage.setItem('pedals_view_mode', newMode);
         set({ pedalsViewMode: newMode });
 
-        const { chartConfigs } = get();
-        let newConfigs = [...chartConfigs];
-        if (newMode === 'merged') {
-            newConfigs = newConfigs.filter(c => c.id !== 'Throttle Pos' && c.id !== 'Brake Pos');
-            if (!newConfigs.some(c => c.id === 'PedalsMerged')) {
-                newConfigs.push({
-                    id: 'PedalsMerged',
-                    alias: 'Throttle / Brake',
-                    color: '#00ff00',
-                    visible: true,
-                    order: 2,
-                    height: 140,
-                    unit: '%'
-                });
-            }
-        } else {
-            newConfigs = newConfigs.filter(c => c.id !== 'PedalsMerged');
-            if (!newConfigs.some(c => c.id === 'Throttle Pos')) {
-                newConfigs.push({ id: 'Throttle Pos', alias: 'Throttle', color: '#00ff00', visible: true, order: 2, height: 120, unit: '%' });
-            }
-            if (!newConfigs.some(c => c.id === 'Brake Pos')) {
-                newConfigs.push({ id: 'Brake Pos', alias: 'Brake', color: '#ff0000', visible: true, order: 3, height: 120, unit: '%' });
-            }
-        }
+        const { customBetaChartConfigs, setCustomBetaChartConfigs, chartConfigs, activeChartCategory } = get();
+        setCustomBetaChartConfigs(transformViewModeConfigs(customBetaChartConfigs, 'pedals', newMode));
+
+        const newConfigs = transformViewModeConfigs(chartConfigs, 'pedals', newMode);
         set({ chartConfigs: newConfigs.sort((a, b) => a.order - b.order) });
-        if (get().activeChartCategory === 'Driver') {
+        if (activeChartCategory === 'Driver') {
             get().setActiveChartCategory('Driver');
         }
     },
@@ -1572,8 +1963,18 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     },
 
     updateChartHeight: (id, height, wheelIndex) => {
-        const { chartConfigs } = get();
+        const { chartConfigs, isCustomBetaMode, customBetaChartConfigs } = get();
         const h = Math.max(60, height);
+
+        if (isCustomBetaMode) {
+            const nextBeta = customBetaChartConfigs.map(c =>
+                (c.id === id && c.wheelIndex === wheelIndex) ? { ...c, height: h } : c
+            );
+            localStorage.setItem('custom_beta_chart_configs', JSON.stringify(nextBeta));
+            set({ customBetaChartConfigs: nextBeta });
+            return;
+        }
+
         const newConfigs = chartConfigs.map(c =>
             (c.id === id && c.wheelIndex === wheelIndex) ? { ...c, height: h } : c
         );
@@ -1588,7 +1989,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     },
 
     resetChartHeight: (id, wheelIndex) => {
-        const { chartConfigs } = get();
+        const { chartConfigs, isCustomBetaMode, customBetaChartConfigs } = get();
         let defaultChart = null;
 
         // 1. Try to find in base configs
@@ -1611,6 +2012,17 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
             if (defaults[id]) {
                 defaultChart = { height: defaults[id] };
             }
+        }
+
+        const targetHeight = defaultChart?.height || ((id === 'Ground Speed' || id === 'Speed') ? 180 : 140);
+
+        if (isCustomBetaMode) {
+            const nextBeta = customBetaChartConfigs.map(c =>
+                (c.id === id && c.wheelIndex === wheelIndex) ? { ...c, height: targetHeight } : c
+            );
+            localStorage.setItem('custom_beta_chart_configs', JSON.stringify(nextBeta));
+            set({ customBetaChartConfigs: nextBeta });
+            return;
         }
 
         if (!defaultChart) return;
@@ -1637,11 +2049,14 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     },
 
     updateChartConfig: (id, updates, wheelIndex) => {
+        const key = `${id}-${wheelIndex ?? 'all'}`;
+        if (updates.color) {
+            saveChannelColor(key, updates.color);
+        }
         const { chartConfigs, chartLayoutMode } = get();
         const storageKey = chartLayoutMode === 'custom' ? 'custom_chart_settings' : 'preset_chart_settings';
 
         const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-        const key = `${id}-${wheelIndex ?? 'all'}`;
         saved[key] = { ...saved[key], ...updates };
         localStorage.setItem(storageKey, JSON.stringify(saved));
 

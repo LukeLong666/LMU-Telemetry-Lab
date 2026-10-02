@@ -4531,5 +4531,36 @@
         "connect_next": false
       }
     ]
+  },
+  "Grand Prix of Long Beach": {
+    "Default": [
+      { "name": "T1", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T2", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T3", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T4", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T5", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T6", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T7", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T8", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T9", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T10", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T11", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false }
+    ]
+  },
+  "Michelin Raceway Road Atlanta": {
+    "Default": [
+      { "name": "T1", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T2", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T3", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T4", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T5", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T6", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T7", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T8", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T9", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T10", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T11", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false },
+      { "name": "T12", "apex": null, "start": null, "end": null, "direction": null, "is_preserved": false, "connect_next": false }
+    ]
   }
 }

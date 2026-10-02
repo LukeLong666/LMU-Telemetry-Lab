@@ -1,5 +1,106 @@
 # PROJECT WALKTHROUGH HISTORY
 
+## 2026-10-03 | Telemetry v1.5.3 - Custom Charts 導航深度融入、單圈時間排序與檔案管理器 UI 輕量化
+
+本次版本（v1.5.3）聚焦於圖表導航流暢度、Custom Charts 視覺純化，以及 Files Manager 檢索體驗與空間利用率的全面重構：
+
+### 變更內容
+- **Custom Charts 標籤純化與導航一體化 (Unified Navigation & Directional Slide)**：
+  - **標籤專業化**：全面移除 `(Beta)` 與 `Testbed` 字樣，統一為 `Custom Chart` 與 `Custom Charts`。
+  - **一體化頂部導航列**：將 Custom Chart 作為第 6 個分項直接嵌入頂部導航膠囊列（`[ DRIVER | TYRES | DYNAMICS | HANDLING | SYSTEMS | ✦ CUSTOM ]`），保持常駐不消失。
+  - **方向感知橫向平移動畫**：將類別切換納入 `CATEGORY_ORDER` 配合 `<AnimatePresence mode="wait">`，自訂方向感知單向平移，徹底解決淡入淡出時圖表交疊卡頓問題。
+  - **動態滑塊漸變過渡**：選中 `CUSTOM` 時，高亮滑動塊（`activeCategoryBlock`）流暢滑移並轉變為尊爵紫色漸層發光（`from-purple-600 via-indigo-600 to-purple-600`）；返回 Preset 分項時無縫變回經典藍色。
+  - **懸浮膠囊純淨化與輕量 Action Bar**：移除全寬深黑背景底帶（`-mx-4 px-4 bg-black/40`），還原純粹浮島質感；將畫布頂部控制列瘦身為半透明緊湊的 Action Bar，帶即時啟用頻道計數器。
+  - **新增通道彈窗美化**：將右上角關閉叉叉按鈕改為與 Settings 一致的圓形毛玻璃順時針旋轉動效按鈕；並將整個彈窗從沉重死黑升級為通透的高階深灰透光質感（`bg-[#1c1d26]/95 border-white/20 backdrop-blur-2xl`），拉亮搜尋框與通道卡片。
+- **Files Manager 排序與空間佈局優化 (Lap Time Sorting & Header Optimization)**：
+  - **最佳單圈時間排序 (Best Lap Time Sorting)**：新增單圈時間由快到慢排序模式（`laptime`），支援無成績自動沉底、次要錄製時間 tie-breaker，並在 `localStorage` 持久化儲存。
+  - **單鍵切換 Toggle Button**：將原本佔用雙倍空間的膠囊簡化為單一微型 Toggle 按鈕，具備 `🕒`（日期）與 `⏱️`（單圈最快）之流暢縮放旋轉動效，為標題行釋放 55% 空間。
+  - **分組方式下拉選單化 (Grouping Dropdown)**：將原本佔據頂部空間的 4 個橫向圖標按鈕（Track, Class, Car, All），重構成小巧精緻的毛玻璃下拉選單（`[ 📍 Track ▾ ]`），支援點擊外部關閉與選中狀態勾選，徹底根治側邊欄頂部的空間擁擠感。
+- **2D 賽道圖 Minimap 純化**：
+  - 移除 2D Minimap 扇區分界線兩端的文字 `S1`, `S2`, `S3`，簡化為純數字圓圈徽章（`1`, `2`, `3`），保持與微區段模式一致的極簡線條。
+- **版本號同步**：
+  - 後端 `backend/main.py`（`/health` endpoint）、前端 `frontend/package.json`、桌面端 `desktop/package.json` 同步升級至 `1.5.3`。
+
+---
+
+## 2026-09-25 | 新增 Long Beach 與 Michelin Raceway Road Atlanta 賽道配置與基礎註冊
+
+本次更新為系統新增兩條全新賽道支援（Grand Prix of Long Beach 與 Michelin Raceway Road Atlanta）：
+
+### 變更內容
+- **後端賽道資料庫註冊 (TRACK_REGISTRY)**：
+  - 在 [`backend/app/utils/track_db.py`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/backend/app/utils/track_db.py) 註冊 `"Grand Prix of Long Beach"`（長度 3167m, 11 彎, 顯示名稱 `"Long Beach"`）與 `"Michelin Raceway Road Atlanta"`（長度 4088m, 12 彎, 顯示名稱 `"Michelin Raceway Road Atlanta"`, 別名含 `"Road Atlanta"`）。
+  - 設定預設 Layout 與起訖參考長度，使單圈長度標準化與 File Manager 分組顯示自動生效。
+- **前端國家國旗與 Canonical Track ID 比對**：
+  - 在 [`frontend/src/utils/trackHelpers.ts`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/utils/trackHelpers.ts) 加入兩賽道對應之 `United States` 國旗解析。
+  - 新增 `'longbeach'` 與 `'roadatlanta'` 的 Canonical ID 解析，支援跨 Session 與社群單圈相容性檢查。
+- **Minimap 扇區、微區段與彎道資源配置**：
+  - 在 [`frontend/src/assets/track_sectors.json`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/assets/track_sectors.json) 加入預設 S1/S2/S3 左右法向量偏移設定。
+  - 在 [`frontend/src/assets/track_segments.json`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/assets/track_segments.json) 與 [`track_segments_template.json`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/track_segments_template.json) 建立並同步 Long Beach（8 個 Segments: 560, 980, 1310, 1775, 2000, 2375, 2855, 3167）與 Road Atlanta（7 個 Segments: 584, 1240, 1752, 2460, 3330, 3680, 4088）之微區段邊界切分。
+  - 在 [`frontend/src/assets/track_corners.json`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/assets/track_corners.json) 與 [`backend/app/data/track_corners.json`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/backend/app/data/track_corners.json) 建立 Long Beach（T1~T11 共 11 彎）與 Road Atlanta（T1~T12 共 12 彎）之彎道骨架。
+- **2D 賽道圖 Sector 模式標記純化 (TrackMap 2D Refinement)**：
+  - 在 [`frontend/src/components/TrackMap.tsx`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/TrackMap.tsx) 中移除分界線兩端的文字標籤 `S1`, `S2`, `S3`，維持賽道邊界乾淨俐落。
+  - 將 Sector 模式下的徽章文字從 `S1`, `S2`, `S3` 改為純數字圓圈（`1`, `2`, `3`），與微區段（Segment）模式的視覺風格完全統一且精準保留點擊與時間差膠囊（diff pill）功能。
+- **賽道 3D 海拔表與高程剖面建立 (Elevation Profiles & Ref Points)**：
+  - 在 [`backend/app/utils/track_metadata.py`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/backend/app/utils/track_metadata.py) 註冊兩賽道真實海拔最大落差：`long beach: 8.5m` 與 `road atlanta: 42.0m`。
+  - 在 [`backend/app/utils/track_db.py`](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/backend/app/utils/track_db.py) 依據真實地理與激光掃描拓撲，為 Long Beach（18 個基準參考點，含 T4 下坡 1.8m、Pine Ave 坡頂 10.3m）與 Road Atlanta（20 個基準參考點，含 T1 上坡、The Esses 蛇形急降谷底 268m、Back Straight 下坡到 T10 減速彎最低點 264m、T11 橋底盲彎巔峰 306m 及 T12 懸崖俯衝段）建立高精度 `ref_points`。
+  - 完成 Loop Closure 與邊界平滑驗證，支援 3D 賽道圖視圖與 Telemetry Z 軸融合（`WorldPosZ`）。
+
+---
+
+## 2026-09-13 | Telemetry Chart UI/UX 深度重構與互動典範升級 (Chart Tooltips, Color Tuning, Add Channel Modal & Smooth Swap Animations)
+
+本次紀錄針對 Telemetry Chart 遙測圖表系統與 Settings 設定介面的 UI/UX 重構進行詳細存檔：
+
+### 變更內容
+- **客製化發光 Tooltip 系統 (Custom Glowing Tooltip System)**：
+  - 全面替換 [TelemetryChart.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/TelemetryChart.tsx) 與 [CustomBetaCanvas.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/CustomBetaCanvas.tsx) 原生 HTML `title` 屬性，改為整體感極佳的自訂 `<Tooltip>` 元件。
+  - 覆蓋點擊調色提示 (`Click to edit chart color`)、重置顏色提示 (`Reset canvas color`)、移除頻道提示 (`Remove chart channel`) 與 3-in-1 排序按鈕提示，提升視覺質感與操作反饋。
+- **即時預覽顏色微調與獨立頻道色彩持久化 (Live Preview Color Tuning & Channel-Specific Storage)**：
+  - 點擊顏色圓點彈出的色彩選擇器支援即時預覽調色與 Backdrop Blur 背景毛玻璃模糊效果。
+  - 重構 `localStorage` 保存機制，以 `${id}-${wheelIndex ?? 'all'}` 為 key，解決 Split/Merge 模式切換時四輪或獨立頻道色彩相互覆蓋問題。
+- **Add Channel 彈出視窗動畫與搜尋篩選 (Upgraded Add Channel Modal with Search & Swatches)**：
+  - 將頻道新增彈窗 (`Add Channel`) 改採用 `createPortal` 渲染至全域 `document.body`，徹底解鎖 Parent Card 容器之 `overflow: hidden` 與 CSS transform 限制。
+  - 容器加大至 `max-w-2xl`，整合淡入淡出與縮放彈跳動畫 (Fade/Scale Animation)，並加入即時搜尋欄 (`Search Bar`) 與專屬發光顏色 Swatch 標籤。支援點擊選單外部與 `Esc` 鍵彈性關閉。
+- **全域與自訂圖表 3-in-1 排序控制項與 Collapse 折疊收合響應 (3-in-1 Chart Reordering Cluster & Collapsed State Simplification)**：
+  - 在所有 Telemetry 圖表卡片左側全面引進三合一控制鍵 (Move Up / Drag Handle / Move Down)，懸停時提供立體放大動畫。
+  - 在 Custom Beta 圖表卡片中，將移除按鈕 (`Trash2`) 獨立配置於三合一控制項上方，維持統一寬度與縮放韻律。
+  - 當點擊圖表右上角 Collapse 折疊圖表時（`isCollapsed === true`），左側控制列自動以 300ms 柔和 CSS 漸變將拖曳鈕 (`GripVertical`) 與移除鈕 (`Trash2`) 滑順收合 (`max-h-0 opacity-0`)，避免 DOM 重繪卡頓，同時將上下箭頭間距與內邊距收緊 (`gap-0 -space-y-1` 與 `p-0`)，讓折疊後的卡片與按鈕組合更加極致緊湊。
+  - 在 Maximize (全螢幕展開) 模式下的側邊 Chart Hub 清單中，特化隱藏 Drag 拖曳按鈕，保留上下箭頭點擊排序，防範懸浮卡片拖曳與視窗衝突。
+- **圖表卡片上下交換雙層滑動動畫 (Smooth 0.45s Twin-Sliding Card Swap Animation)**：
+  - 點擊上下箭頭時，採用 Framer Motion `<motion.div layout="position">` 配合 `tween` 曲線 (0.45s, `ease: [0.25, 1, 0.5, 1]`) 實現卡片雙向滑動交叉位移。
+  - 被點擊箭頭的卡片帶有高層級 `zIndex: 50` 保持在上層，被替換卡片在下層滑動，創造視覺層次分明的流暢交換。
+  - 交換期間自動施加 `pointer-events-none` 480ms 懸停防護，避免滑鼠焦點在滑動過程中連續觸發 hover spotlight 重算與放縮晃動，交換完畢後滑順還原 Hover 動態發光。
+- **圖表拆分與合併動態滑動動畫 (Split & Merge Dynamic Sliding Transition)**：
+  - 在 [App.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/App.tsx) 與 [CustomBetaCanvas.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/CustomBetaCanvas.tsx) 導入 Framer Motion `<AnimatePresence initial={false}>` 容器機制。
+  - **固定錨點與卡牌滑出/滑回機制 (Deck of Cards Morph Mechanics)**：引進 `getStableChartKey` 機制，確保各圖表群組的最上方 Anchor 卡片（如 Throttle / Merged Pedals）在 Split/Merge 狀態切換時 React Key 恆定，位置全程固若金湯、永不閃爍銷毀。
+  - **動態滑出/滑回與全方同步推進 (PopLayout Synchronous Layout Transition)**：全面導入 `<AnimatePresence mode="popLayout">`，當點擊 **Merge (合併)** 時，次級卡片滑回 Anchor 卡片後方溶解的瞬間，下方所有無關之圖表卡片立即解除版面排隊，同步在 0.45s 內毫秒級向上推進遞補，達成極致同步的整體滑動感。
+- **多圖表單張定向逐一展開與折疊動畫 (Sequential Top-to-Bottom Split & Bottom-to-Top Merge)**：
+  - **拆分由頂向下逐一展開 (Split: Top-to-Bottom Sequential Unfold)**：進入卡片（`animate`）採用動態依輪位算出的 `entryDelay = wIdx * 0.14s`。點擊 Split 時，卡片 1 先向下滑出，0.14s 後卡片 2 接續向下滑出，0.28s 後卡片 3 滑出，完美呈現一個接一個向下展開的極致層次。
+  - **合併由底向上逐一收合 (Merge: Bottom-to-Top Sequential Fold)**：離開卡片（`exit`）採用反向算出的 `exitDelay = (maxWIdx - wIdx) * 0.14s`。點擊 Merge 時，最底層卡片 3 率先向上滑回卡片 2 後方，隨後卡片 2 向上滑回卡片 1，最後卡片 1 滑回最頂層 Anchor 卡片後方，實現一個接一個向上摺疊收合的滑順體驗。
+- **Settings 設定選單 Chart Layout & Colors 暫時隱藏 (Temporary Hide of Chart Layout Settings)**：
+  - 在 [SettingsOverlay.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/SettingsOverlay.tsx) 內將 `Chart Layout & Colors` 區塊以 `{false && (...)}` 暫時隱藏，完整保留底層設定代碼與邏輯以便日後快速恢復。
+
+---
+
+## 2026-09-12 | Telemetry v1.5.3 - 油溫水溫通道、Community Share 快取載入優化與 Custom Chart Beta 自訂 Y 軸 (v1.5.3 Major Updates)
+
+本次紀錄針對 v1.5.3 的三大核心更新進行代碼邏輯確認與 Walkthrough 歷史存檔：
+
+### 變更內容
+- **油溫與水溫遙測通道 (Engine Oil & Water Temperature Channels)**：
+  - 在 [telemetryStore.ts](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/store/telemetryStore.ts) 與 [SettingsOverlay.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/SettingsOverlay.tsx) 加入 `Engine Oil Temp` (`Oil Temp`) 與 `Engine Water Temp` (`Water Temp`) 於 `Systems` 遙測類別中。
+  - 通道顯示單位為 `°C`（整合溫標切換），高度設為 `140px`，並在單圈對比中完美疊加顯示。
+- **Community Share 載入速度優化 (Community Share Parallel Fetch & Thread-Safe Caching)**：
+  - 於 [discord_service.py](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/backend/app/services/discord_service.py) 重構 Discord API 請求流程，採用 `ThreadPoolExecutor(max_workers=10)` 進行多執行緒並列抓取。
+  - 引入雙層 Thread-Safe 快取機制（`_shares_cache` 60s TTL、`_member_cache` 15min TTL），避免重複觸發 Discord API Rate Limit 限制，達到毫秒級反應速度。
+- **Custom Chart Beta 草稿畫布與高度動態拉伸 (Custom Chart Beta Scratchpad & Height Resizing)**：
+  - 新增 [CustomBetaCanvas.tsx](file:///c:/Users/rabbit/Desktop/antigravity%20project/DuckDB_investigation/frontend/src/components/CustomBetaCanvas.tsx) 畫布組件與 `isCustomBetaMode` Store 狀態。
+  - 預設載入極簡 3 大頻道（Speed, Throttle, Brake），點擊 `RotateCcw` 可重置佈局且無須刷新網頁。
+  - 支援在 Custom Beta 模式下直接拖曳圖表卡片底部 Resize Handle 動態調整拉伸高度並持久化。簡化視覺介面，移除暫不需要的 Y-Axis Limits 控制項。
+
+---
+
 ## 2026-08-11 | Workspace Selector 拖曳排序與預設開啟 Workspace 設定 (Workspace Reordering & Launch Default)
 
 本次更新為 **WORKSPACE SELECTOR** 增加了直覺的 Drag & Drop 拖曳排序功能，並自動將位於最上方的 Workspace 設為 App 啟動時的預設 Workspace。

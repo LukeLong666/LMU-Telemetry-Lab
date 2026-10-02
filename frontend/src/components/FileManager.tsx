@@ -14,6 +14,13 @@ import { getCountryFlagPath } from '../utils/trackHelpers';
 
 const DEFAULT_LMU_PATH = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\UserData\\Telemetry';
 
+const GROUPING_OPTIONS = [
+    { id: 'track', label: 'Track', icon: MapPin },
+    { id: 'class', label: 'Class', icon: Trophy },
+    { id: 'car', label: 'Car', icon: Car },
+    { id: 'all', label: 'All Files', icon: Clock },
+] as const;
+
 interface FileManagerProps {
     onClose?: () => void;
     highlightedSessionId?: string | null;
@@ -52,8 +59,25 @@ export const FileManager: React.FC<FileManagerProps> = ({
     const [isDeleting, setIsDeleting] = useState(false);
     const [groupingMode, setGroupingMode] = useState<'track' | 'class' | 'car' | 'all'>(() => (localStorage.getItem('file_manager_grouping') as any) || 'track');
     const [classSubModes, setClassSubModes] = useState<Record<string, 'track' | 'car'>>(() => JSON.parse(localStorage.getItem('file_manager_class_submodes') || '{}'));
+    const [sessionSortMode, setSessionSortMode] = useState<'date' | 'laptime'>(() => (localStorage.getItem('file_manager_session_sort') as any) || 'date');
+    const [isGroupingDropdownOpen, setIsGroupingDropdownOpen] = useState(false);
+    const groupingDropdownRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(0);
+
+    React.useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (groupingDropdownRef.current && !groupingDropdownRef.current.contains(e.target as Node)) {
+                setIsGroupingDropdownOpen(false);
+            }
+        };
+        if (isGroupingDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isGroupingDropdownOpen]);
 
     React.useEffect(() => {
         if (!containerRef.current) return;
@@ -85,6 +109,10 @@ export const FileManager: React.FC<FileManagerProps> = ({
     React.useEffect(() => {
         localStorage.setItem('file_manager_class_submodes', JSON.stringify(classSubModes));
     }, [classSubModes]);
+
+    React.useEffect(() => {
+        localStorage.setItem('file_manager_session_sort', sessionSortMode);
+    }, [sessionSortMode]);
 
     React.useEffect(() => {
         const checkPath = async () => {
@@ -576,6 +604,28 @@ export const FileManager: React.FC<FileManagerProps> = ({
         return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
     };
 
+    const sortSessions = (list: Session[], sortMode: 'date' | 'laptime') => {
+        return [...list].sort((a, b) => {
+            if (sortMode === 'laptime') {
+                const timeA = (a.bestLapTime && a.bestLapTime > 0) ? a.bestLapTime : Infinity;
+                const timeB = (b.bestLapTime && b.bestLapTime > 0) ? b.bestLapTime : Infinity;
+
+                if (timeA !== timeB) {
+                    return timeA - timeB; // 升序：最快到最慢，無成績 (Infinity) 自動墊底
+                }
+                // 單圈時間相同或皆無單圈時，以時間由新到舊作為 tie-breaker
+                const dateA = parseMetadata(a.id)?.dateObj.getTime() || (a.created ? a.created * 1000 : 0);
+                const dateB = parseMetadata(b.id)?.dateObj.getTime() || (b.created ? b.created * 1000 : 0);
+                return dateB - dateA;
+            }
+
+            // 預設 'date'：上傳/錄製時間由新到舊
+            const dateA = parseMetadata(a.id)?.dateObj.getTime() || (a.created ? a.created * 1000 : 0);
+            const dateB = parseMetadata(b.id)?.dateObj.getTime() || (b.created ? b.created * 1000 : 0);
+            return dateB - dateA;
+        });
+    };
+
     const groupedData = useMemo(() => {
         let filtered = sessions;
         if (searchQuery) {
@@ -601,7 +651,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
                 id: 'all_sessions',
                 name: 'All Sessions',
                 type: 'all',
-                sessions: [...filtered].sort((a, b) => (b.created || 0) - (a.created || 0)),
+                sessions: sortSessions(filtered, sessionSortMode),
                 isFlat: true
             }];
         }
@@ -649,22 +699,14 @@ export const FileManager: React.FC<FileManagerProps> = ({
         // Convert and sort
         const result = Object.values(hierarchy).map((group: any) => {
             if (groupingMode === 'track') {
-                group.sessions.sort((a: any, b: any) => {
-                    const timeA = parseMetadata(a.id)?.dateObj.getTime() || (a.created ? a.created * 1000 : 0);
-                    const timeB = parseMetadata(b.id)?.dateObj.getTime() || (b.created ? b.created * 1000 : 0);
-                    return timeB - timeA;
-                });
+                group.sessions = sortSessions(group.sessions, sessionSortMode);
                 group.totalSessions = group.sessions.length;
                 return group;
             } else {
                 let total = 0;
                 const children = Object.values(group.children).map((child: any) => {
                     total += child.sessions.length;
-                    child.sessions.sort((a: any, b: any) => {
-                        const timeA = parseMetadata(a.id)?.dateObj.getTime() || (a.created ? a.created * 1000 : 0);
-                        const timeB = parseMetadata(b.id)?.dateObj.getTime() || (b.created ? b.created * 1000 : 0);
-                        return timeB - timeA;
-                    });
+                    child.sessions = sortSessions(child.sessions, sessionSortMode);
                     return child;
                 }).sort((a: any, b: any) => a.name.localeCompare(b.name));
                 return { ...group, children, totalSessions: total };
@@ -672,7 +714,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
         }).sort((a: any, b: any) => a.name.localeCompare(b.name));
 
         return result;
-    }, [sessions, searchQuery, groupingMode, classSubModes]);
+    }, [sessions, searchQuery, groupingMode, classSubModes, sessionSortMode]);
 
     return (
         <div 
@@ -763,33 +805,101 @@ export const FileManager: React.FC<FileManagerProps> = ({
                     <div className="flex items-center gap-2">
                         <span className="text-[12px] font-black text-white uppercase tracking-[0.2em]">Files</span>
                         <span className="text-[11px] font-bold text-gray-400 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/10 shadow-inner">{sessions.length}</span>
-                        <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 ml-2 relative">
-                            {['track', 'class', 'car', 'all'].map((mode) => (
-                                <Tooltip key={mode} text={mode === 'all' ? "List all files by time" : `Group by ${mode.charAt(0).toUpperCase() + mode.slice(1)}`} position="bottom">
-                                    <button
-                                        onClick={() => setGroupingMode(mode as any)}
-                                        className={`relative p-1.5 rounded-lg transition-colors z-10 ${groupingMode === mode ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                        {/* Grouping Dropdown */}
+                        <div ref={groupingDropdownRef} className="relative ml-1 z-30">
+                            <button
+                                onClick={() => setIsGroupingDropdownOpen(prev => !prev)}
+                                className={`flex items-center gap-1.5 px-2 py-1 bg-white/5 hover:bg-white/10 border rounded-xl text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
+                                    isGroupingDropdownOpen ? 'border-blue-500/50 bg-blue-500/10 text-blue-300' : 'border-white/10 text-gray-300 hover:border-white/20'
+                                }`}
+                            >
+                                {(() => {
+                                    const current = GROUPING_OPTIONS.find(o => o.id === groupingMode) || GROUPING_OPTIONS[0];
+                                    const Icon = current.icon;
+                                    return (
+                                        <>
+                                            <Icon size={12} className="text-blue-400" />
+                                            <span className="text-[10px] font-bold text-gray-200 uppercase tracking-wider">{current.label}</span>
+                                            <ChevronDown size={11} className={`text-gray-400 transition-transform duration-200 ${isGroupingDropdownOpen ? 'rotate-180 text-blue-400' : ''}`} />
+                                        </>
+                                    );
+                                })()}
+                            </button>
+
+                            <AnimatePresence>
+                                {isGroupingDropdownOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                        transition={{ duration: 0.15 }}
+                                        className="absolute left-0 mt-1.5 w-36 bg-[#16171e]/95 backdrop-blur-2xl border border-white/15 rounded-xl shadow-[0_12px_30px_rgba(0,0,0,0.6)] py-1 z-50 flex flex-col gap-0.5"
                                     >
-                                        {groupingMode === mode && (
-                                            <motion.div
-                                                layout
-                                                layoutId="activeGroupingTab"
-                                                className="absolute inset-0 bg-blue-600 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.4)]"
-                                                transition={{ type: "spring", bounce: 0, duration: 0.2 }}
-                                            />
-                                        )}
-                                        <div className="relative z-20">
-                                            {mode === 'track' && <MapPin size={12} />}
-                                            {mode === 'class' && <Trophy size={12} />}
-                                            {mode === 'car' && <Car size={12} />}
-                                            {mode === 'all' && <Clock size={12} />}
+                                        <div className="px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-gray-400 border-b border-white/5 mb-0.5">
+                                            Group By
                                         </div>
-                                    </button>
-                                </Tooltip>
-                            ))}
+                                        {GROUPING_OPTIONS.map(opt => {
+                                            const Icon = opt.icon;
+                                            const isSelected = groupingMode === opt.id;
+                                            return (
+                                                <button
+                                                    key={opt.id}
+                                                    onClick={() => {
+                                                        setGroupingMode(opt.id);
+                                                        setIsGroupingDropdownOpen(false);
+                                                    }}
+                                                    className={`flex items-center justify-between px-2.5 py-1.5 text-[11px] font-bold transition-colors cursor-pointer rounded-lg mx-1 ${
+                                                        isSelected 
+                                                            ? 'bg-blue-600/25 text-blue-300' 
+                                                            : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <Icon size={12} className={isSelected ? 'text-blue-400' : 'text-gray-400'} />
+                                                        <span>{opt.label}</span>
+                                                    </div>
+                                                    {isSelected && <Check size={12} className="text-blue-400" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {/* Single-button Session Sort Mode Toggle */}
+                        <Tooltip
+                            text={sessionSortMode === 'date' ? "Sorted by Date (Click to sort by fastest lap)" : "Sorted by Fastest Lap (Click to sort by date)"}
+                            position="bottom"
+                        >
+                            <button
+                                onClick={() => setSessionSortMode(prev => prev === 'date' ? 'laptime' : 'date')}
+                                className={`p-1.5 rounded-xl border transition-all active:scale-95 flex items-center justify-center cursor-pointer ${
+                                    sessionSortMode === 'laptime'
+                                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                                        : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20'
+                                }`}
+                            >
+                                <AnimatePresence mode="wait" initial={false}>
+                                    <motion.div
+                                        key={sessionSortMode}
+                                        initial={{ scale: 0.6, opacity: 0, rotate: -25 }}
+                                        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                        exit={{ scale: 0.6, opacity: 0, rotate: 25 }}
+                                        transition={{ duration: 0.15 }}
+                                        className="flex items-center justify-center"
+                                    >
+                                        {sessionSortMode === 'laptime' ? (
+                                            <Timer size={13} className="text-purple-400" />
+                                        ) : (
+                                            <HistoryIcon size={13} />
+                                        )}
+                                    </motion.div>
+                                </AnimatePresence>
+                            </button>
+                        </Tooltip>
+
                         {expandedFolders.length > 0 && (
                             <Tooltip text="Collapse All" position="left">
                                 <button

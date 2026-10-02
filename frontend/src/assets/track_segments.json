@@ -1274,5 +1274,79 @@
         }
       ]
     }
+  },
+  "Grand Prix of Long Beach": {
+    "Default": {
+      "data_source": "",
+      "segments": [
+        {
+          "name": "Seg 1",
+          "end": 560.0
+        },
+        {
+          "name": "Seg 2",
+          "end": 980.0
+        },
+        {
+          "name": "Seg 3",
+          "end": 1310.0
+        },
+        {
+          "name": "Seg 4",
+          "end": 1775.0
+        },
+        {
+          "name": "Seg 5",
+          "end": 2000.0
+        },
+        {
+          "name": "Seg 6",
+          "end": 2375.0
+        },
+        {
+          "name": "Seg 7",
+          "end": 2855.0
+        },
+        {
+          "name": "Seg 8",
+          "end": 3167.0
+        }
+      ]
+    }
+  },
+  "Michelin Raceway Road Atlanta": {
+    "Default": {
+      "data_source": "",
+      "segments": [
+        {
+          "name": "Seg 1",
+          "end": 584.0
+        },
+        {
+          "name": "Seg 2",
+          "end": 1240.0
+        },
+        {
+          "name": "Seg 3",
+          "end": 1752.0
+        },
+        {
+          "name": "Seg 4",
+          "end": 2460.0
+        },
+        {
+          "name": "Seg 5",
+          "end": 3330.0
+        },
+        {
+          "name": "Seg 6",
+          "end": 3680.0
+        },
+        {
+          "name": "Seg 7",
+          "end": 4088.0
+        }
+      ]
+    }
   }
 }

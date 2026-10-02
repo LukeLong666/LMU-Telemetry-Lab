@@ -11,6 +11,8 @@ class DiscordService:
     CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "discord_config.json")
     _shares_cache = {}  # key: channel_id -> (timestamp, data_list)
     _shares_cache_lock = threading.Lock()
+    _member_cache = {}  # key: user_id -> (timestamp, member_data)
+    _member_cache_lock = threading.Lock()
 
     @classmethod
     def get_config(cls):
@@ -271,6 +273,13 @@ class DiscordService:
         if not config or not config.get("bot_token") or not config.get("guild_id"):
             return None
             
+        now = time.time()
+        with cls._member_cache_lock:
+            if user_id in cls._member_cache:
+                timestamp, cached_member = cls._member_cache[user_id]
+                if now - timestamp < 900:  # 15 minutes TTL
+                    return cached_member
+
         bot_token = config["bot_token"]
         guild_id = config["guild_id"]
         
@@ -281,7 +290,10 @@ class DiscordService:
         try:
             r = requests.get(url, headers=headers, timeout=5)
             if r.status_code == 200:
-                return r.json()
+                data = r.json()
+                with cls._member_cache_lock:
+                    cls._member_cache[user_id] = (time.time(), data)
+                return data
         except Exception as e:
             logger.error(f"Failed to fetch guild member {user_id}: {e}")
         return None
@@ -316,7 +328,7 @@ class DiscordService:
         try:
             target_threads = []
             
-            # A. Fetch active threads in guild and filter by parent_id (since channel-level active threads API doesn't exist in Discord)
+            # A. Fetch active threads in guild and filter by parent_id
             guild_active_url = f"https://discord.com/api/v10/guilds/{guild_id}/threads/active"
             active_r = requests.get(guild_active_url, headers=headers, timeout=10)
             if active_r.status_code == 200:
@@ -349,101 +361,99 @@ class DiscordService:
             # Sort target threads by id descending (latest threads first)
             target_threads.sort(key=lambda t: t.get("id", ""), reverse=True)
             
-            shared_laps = []
-            # For each thread (limit to latest 20 to avoid rate limits), fetch the starter message
-            # The starter message ID is the thread ID
-            for t in target_threads[:20]:
+            def fetch_single_thread(t):
                 thread_id = t["id"]
                 thread_name = t["name"]
-                
-                # Fetch message with ID = thread_id
                 msg_url = f"https://discord.com/api/v10/channels/{thread_id}/messages/{thread_id}"
-                msg_r = requests.get(msg_url, headers=headers, timeout=10)
-                if msg_r.status_code == 200:
-                    msg = msg_r.json()
-                    content = msg.get("content", "")
-                    cleaned_content = content
-                    if "---" in content:
-                        parts = content.split("---", 1)
-                        cleaned_content = parts[1].strip()
-                    
-                    # Try to extract actual author from mention in content e.g. "Telemetry Shared by <@12345>"
-                    import re
-                    mention_match = re.search(r"<@(\d+)>", content)
-                    resolved_author = False
-                    
-                    if mention_match:
-                        real_user_id = mention_match.group(1)
-                        member_info = cls.get_guild_member(real_user_id)
-                        if member_info:
-                            user_data = member_info.get("user", {})
-                            author_id = user_data.get("id", real_user_id)
-                            author_name = user_data.get("username", "Unknown")
-                            author_global_name = user_data.get("global_name", "")
-                            nick = member_info.get("nick", "")
-                            author_display = nick or author_global_name or author_name
+                try:
+                    msg_r = requests.get(msg_url, headers=headers, timeout=5)
+                    if msg_r.status_code == 200:
+                        msg = msg_r.json()
+                        content = msg.get("content", "")
+                        cleaned_content = content
+                        if "---" in content:
+                            parts = content.split("---", 1)
+                            cleaned_content = parts[1].strip()
+                        
+                        import re
+                        mention_match = re.search(r"<@(\d+)>", content)
+                        resolved_author = False
+                        
+                        if mention_match:
+                            real_user_id = mention_match.group(1)
+                            member_info = cls.get_guild_member(real_user_id)
+                            if member_info:
+                                user_data = member_info.get("user", {})
+                                author_id = user_data.get("id", real_user_id)
+                                author_name = user_data.get("username", "Unknown")
+                                author_global_name = user_data.get("global_name", "")
+                                nick = member_info.get("nick", "")
+                                author_display = nick or author_global_name or author_name
+                                
+                                avatar_hash = user_data.get("avatar")
+                                if avatar_hash:
+                                    avatar_url = f"https://cdn.discordapp.com/avatars/{author_id}/{avatar_hash}.png"
+                                else:
+                                    default_avatar_index = (int(author_id) >> 22) % 6
+                                    avatar_url = f"https://cdn.discordapp.com/embed/avatars/{default_avatar_index}.png"
+                                resolved_author = True
+
+                        if not resolved_author:
+                            author_data = msg.get("author", {})
+                            author_name = author_data.get("username", "Unknown")
+                            author_global_name = author_data.get("global_name", "")
+                            author_display = author_global_name or author_name
                             
-                            # Resolve avatar URL
-                            avatar_hash = user_data.get("avatar")
+                            avatar_hash = author_data.get("avatar")
+                            author_id = author_data.get("id")
                             if avatar_hash:
                                 avatar_url = f"https://cdn.discordapp.com/avatars/{author_id}/{avatar_hash}.png"
                             else:
                                 default_avatar_index = (int(author_id) >> 22) % 6
                                 avatar_url = f"https://cdn.discordapp.com/embed/avatars/{default_avatar_index}.png"
-                            resolved_author = True
-
-                    if not resolved_author:
-                        author_data = msg.get("author", {})
-                        author_name = author_data.get("username", "Unknown")
-                        author_global_name = author_data.get("global_name", "")
-                        author_display = author_global_name or author_name
                         
-                        # Resolve avatar URL
-                        avatar_hash = author_data.get("avatar")
-                        author_id = author_data.get("id")
-                        if avatar_hash:
-                            avatar_url = f"https://cdn.discordapp.com/avatars/{author_id}/{avatar_hash}.png"
-                        else:
-                            default_avatar_index = (int(author_id) >> 22) % 6
-                            avatar_url = f"https://cdn.discordapp.com/embed/avatars/{default_avatar_index}.png"
-                    attachments = msg.get("attachments", [])
-                    
-                    # Look for telemetry (.duckdb) and setup (.svm) attachments
-                    telemetry_att = None
-                    setup_att = None
-                    for att in attachments:
-                        fn = att.get("filename", "").lower()
-                        if fn.endswith(".duckdb"):
-                            telemetry_att = {
-                                "filename": att.get("filename"),
-                                "url": att.get("url"),
-                                "size": att.get("size")
+                        attachments = msg.get("attachments", [])
+                        telemetry_att = None
+                        setup_att = None
+                        for att in attachments:
+                            fn = att.get("filename", "").lower()
+                            if fn.endswith(".duckdb"):
+                                telemetry_att = {
+                                    "filename": att.get("filename"),
+                                    "url": att.get("url"),
+                                    "size": att.get("size")
+                                }
+                            elif fn.endswith(".svm"):
+                                setup_att = {
+                                    "filename": att.get("filename"),
+                                    "url": att.get("url"),
+                                    "size": att.get("size")
+                                }
+                                
+                        if telemetry_att:
+                            return {
+                                "thread_id": thread_id,
+                                "title": thread_name,
+                                "author": {
+                                    "id": author_id,
+                                    "username": author_name,
+                                    "display_name": author_display,
+                                    "avatar_url": avatar_url
+                                },
+                                "content": cleaned_content,
+                                "telemetry": telemetry_att,
+                                "setup": setup_att,
+                                "created_at": msg.get("timestamp", "")
                             }
-                        elif fn.endswith(".svm"):
-                            setup_att = {
-                                "filename": att.get("filename"),
-                                "url": att.get("url"),
-                                "size": att.get("size")
-                            }
-                            
-                    # Only include in lists if it has a telemetry attachment
-                    if telemetry_att:
-                        shared_laps.append({
-                            "thread_id": thread_id,
-                            "title": thread_name,
-                            "author": {
-                                "id": author_id,
-                                "username": author_name,
-                                "display_name": author_display,
-                                "avatar_url": avatar_url
-                            },
-                            "content": cleaned_content,
-                            "telemetry": telemetry_att,
-                            "setup": setup_att,
-                            "created_at": msg.get("timestamp", "")
-                        })
-                else:
-                    logger.error(f"Failed to fetch starter message for thread {thread_id}: {msg_r.status_code}")
+                except Exception as ex:
+                    logger.error(f"Error fetching thread {thread_id}: {ex}")
+                return None
+
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                results = list(executor.map(fetch_single_thread, target_threads[:20]))
+
+            shared_laps = [r for r in results if r is not None]
                     
             # Cache the result
             with cls._shares_cache_lock:

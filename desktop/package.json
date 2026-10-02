@@ -1,6 +1,6 @@
 {
     "name": "lmu-telemetry-lab",
-    "version": "1.5.1",
+    "version": "1.5.3",
     "main": "main.js",
     "scripts": {
         "start": "electron .",
@@ -27,9 +27,10 @@
             "target": "nsis"
         },
         "nsis": {
-            "oneClick": false,
-            "allowToChangeInstallationDirectory": true,
-            "allowElevation": true
+            "oneClick": true,
+            "perMachine": false,
+            "allowElevation": true,
+            "runAfterFinish": true
         }
     },
     "devDependencies": {

@@ -836,5 +836,67 @@ TRACK_REGISTRY = {
                 ]
             }
         }
+    },
+    "Grand Prix of Long Beach": {
+        "display_name": "Long Beach",
+        "aliases": ["Long Beach", "Long Beach Grand Prix", "Grand Prix of Long Beach"],
+        "country": "United States",
+        "layouts": {
+            "Default": {
+                "aliases": ["Grand Prix of Long Beach", "Grand Prix", "Default"],
+                "ref_points": [
+                    { "dist": 0, "alt": 3.5, "corner": "Start/Finish Line (Shoreline Drive)" },
+                    { "dist": 400, "alt": 3.8, "corner": "Shoreline Drive (T1 Braking)" },
+                    { "dist": 560, "alt": 4.5, "corner": "T1 Apex (Right onto Aquarium Way)" },
+                    { "dist": 850, "alt": 5.2, "corner": "T2 / Dolphin Fountain Roundabout" },
+                    { "dist": 980, "alt": 4.8, "corner": "T3 Exit" },
+                    { "dist": 1150, "alt": 3.8, "corner": "Approach to T4 (Downhill Start)" },
+                    { "dist": 1310, "alt": 1.8, "corner": "T4 Apex (Drop into Seaside Way - Low 1.8m)" },
+                    { "dist": 1550, "alt": 1.8, "corner": "T5 Apex (Left onto Seaside Way)" },
+                    { "dist": 1775, "alt": 2.0, "corner": "Seaside Way Mid Straight" },
+                    { "dist": 1950, "alt": 2.5, "corner": "T6 Braking (Start of Pine Ave Climb)" },
+                    { "dist": 2050, "alt": 4.0, "corner": "T6 Apex (Right onto South Pine Ave)" },
+                    { "dist": 2180, "alt": 10.3, "corner": "Pine Ave Summit (Peak near Ocean Blvd 10.3m)" },
+                    { "dist": 2375, "alt": 9.5, "corner": "T7 / T8 Section (Convention Center Concourse)" },
+                    { "dist": 2600, "alt": 7.2, "corner": "T9 Apex (Right onto South Hart Place Descent)" },
+                    { "dist": 2855, "alt": 4.5, "corner": "T10 Apex (Descent towards Shoreline Level)" },
+                    { "dist": 3020, "alt": 3.8, "corner": "T11 Hairpin Braking" },
+                    { "dist": 3080, "alt": 3.6, "corner": "T11 Hairpin Apex" },
+                    { "dist": 3167, "alt": 3.5, "corner": "Start/Finish Line" },
+                ]
+            }
+        }
+    },
+    "Michelin Raceway Road Atlanta": {
+        "display_name": "Road Atlanta",
+        "aliases": ["Road Atlanta", "Michelin Raceway Road Atlanta"],
+        "country": "United States",
+        "layouts": {
+            "Default": {
+                "aliases": ["Michelin Raceway Road Atlanta", "Road Atlanta", "Default"],
+                "ref_points": [
+                    { "dist": 0, "alt": 275.0, "corner": "Start/Finish Line (Front Straight)" },
+                    { "dist": 200, "alt": 273.5, "corner": "Front Straight Compression" },
+                    { "dist": 460, "alt": 284.0, "corner": "T1 Apex (Fast Uphill Sweeper)" },
+                    { "dist": 584, "alt": 286.0, "corner": "T1 Exit Crest (Top of Initial Climb)" },
+                    { "dist": 780, "alt": 283.0, "corner": "T2 Apex (Start of Plunge)" },
+                    { "dist": 950, "alt": 276.0, "corner": "T3 Apex (Plunging into The Esses)" },
+                    { "dist": 1100, "alt": 271.0, "corner": "T4 Apex (The Esses Left)" },
+                    { "dist": 1240, "alt": 268.0, "corner": "T5 Apex / Esses Dip (Compression Dip 268m)" },
+                    { "dist": 1400, "alt": 275.0, "corner": "T5 Exit Climb (Steep Acceleration)" },
+                    { "dist": 1600, "alt": 282.0, "corner": "T6 Apex (Climbing Right Hander)" },
+                    { "dist": 1752, "alt": 285.0, "corner": "T7 Apex (Onto Back Straight)" },
+                    { "dist": 2100, "alt": 288.0, "corner": "Back Straight (Crest Section)" },
+                    { "dist": 2460, "alt": 282.0, "corner": "Back Straight Mid (Gentle Roll)" },
+                    { "dist": 2900, "alt": 272.0, "corner": "Back Straight High-Speed Plunge" },
+                    { "dist": 3330, "alt": 264.0, "corner": "T10a/10b Chicane (Lowest Point 264m)" },
+                    { "dist": 3550, "alt": 285.0, "corner": "T10b Exit to T11 (Extreme Uphill Punch)" },
+                    { "dist": 3680, "alt": 306.0, "corner": "T11 Apex / Under Bridge Crest (Summit 306m)" },
+                    { "dist": 3850, "alt": 292.0, "corner": "T12 Approach (Diving off the Cliff)" },
+                    { "dist": 3950, "alt": 280.0, "corner": "T12 Apex (Massive Downhill Compression)" },
+                    { "dist": 4088, "alt": 275.0, "corner": "Start/Finish Line" },
+                ]
+            }
+        }
     }
 }

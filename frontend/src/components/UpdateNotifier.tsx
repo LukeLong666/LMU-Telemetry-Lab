@@ -73,6 +73,17 @@ export const UpdateNotifier = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
 
+  // Auto-Update Download State
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ percent: number; transferred: number; total: number; speedBytesPerSec: number }>({
+    percent: 0,
+    transferred: 0,
+    total: 0,
+    speedBytesPerSec: 0
+  });
+  const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'completed' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+
   useEffect(() => {
     const checkUpdate = async () => {
       try {
@@ -100,6 +111,31 @@ export const UpdateNotifier = () => {
     checkUpdate();
   }, []);
 
+  // Listen to Electron IPC download events
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) return;
+
+    const cleanupProgress = electronAPI.onUpdateProgress((data: any) => {
+      setDownloadProgress(data);
+    });
+
+    const cleanupComplete = electronAPI.onUpdateComplete(() => {
+      setDownloadStatus('completed');
+    });
+
+    const cleanupError = electronAPI.onUpdateError((data: any) => {
+      setDownloadStatus('error');
+      setErrorMessage(data.error || 'Download failed');
+    });
+
+    return () => {
+      if (cleanupProgress) cleanupProgress();
+      if (cleanupComplete) cleanupComplete();
+      if (cleanupError) cleanupError();
+    };
+  }, []);
+
   const handleDismiss = () => {
     setShowPopup(false);
   };
@@ -112,8 +148,35 @@ export const UpdateNotifier = () => {
   };
 
   const handleUpdate = () => {
-    window.open('https://rabbit20031225.github.io/LMU-Telemetry-Lab/', '_blank');
-    setShowPopup(false);
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI && electronAPI.downloadUpdate && latestRelease) {
+      setIsDownloading(true);
+      setDownloadStatus('downloading');
+      setErrorMessage('');
+      setDownloadProgress({ percent: 0, transferred: 0, total: 0, speedBytesPerSec: 0 });
+
+      const exeAsset = latestRelease.assets?.find((a: any) => a.name.endsWith('.exe'));
+      const downloadUrl = exeAsset?.browser_download_url || 
+        `https://github.com/${GITHUB_REPO}/releases/download/${latestRelease.tag_name}/LMU_Telemetry_Lab_Setup_${latestRelease.tag_name.replace(/^v/, '')}.exe`;
+
+      electronAPI.downloadUpdate(downloadUrl, latestRelease.tag_name);
+    } else {
+      // Web browser fallback
+      window.open(latestRelease?.html_url || 'https://rabbit20031225.github.io/LMU-Telemetry-Lab/', '_blank');
+      setShowPopup(false);
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes === 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const formatSpeed = (bytesPerSec: number) => {
+    if (!bytesPerSec || bytesPerSec === 0) return '0.0 MB/s';
+    const mb = bytesPerSec / (1024 * 1024);
+    return `${mb.toFixed(1)} MB/s`;
   };
 
   return (
@@ -148,55 +211,125 @@ export const UpdateNotifier = () => {
                     </h3>
                   </div>
                 </div>
-                <button 
-                  onClick={handleDismiss}
-                  className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all glass-container rounded-full border border-white/10 group/close"
-                >
-                  <X size={18} className="group-hover/close:rotate-90 transition-transform duration-300" />
-                </button>
+                {!isDownloading && (
+                  <button 
+                    onClick={handleDismiss}
+                    className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all glass-container rounded-full border border-white/10 group/close"
+                  >
+                    <X size={18} className="group-hover/close:rotate-90 transition-transform duration-300" />
+                  </button>
+                )}
               </div>
 
-              {/* Release Info Content */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 w-fit">
-                  <Info size={12} className="text-gray-400" />
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    {CURRENT_VERSION} <ChevronRight size={10} className="inline mx-1 opacity-50" /> {latestRelease.tag_name}
-                  </span>
+              {/* Release Info or Auto-Download Progress */}
+              {!isDownloading ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 w-fit">
+                    <Info size={12} className="text-gray-400" />
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      {CURRENT_VERSION} <ChevronRight size={10} className="inline mx-1 opacity-50" /> {latestRelease.tag_name}
+                    </span>
+                  </div>
+                  
+                  {/* Minimalist Release Body */}
+                  <div className="max-h-[120px] overflow-y-auto custom-scrollbar pr-2">
+                    <p className="text-[11px] leading-relaxed text-gray-400 font-medium whitespace-pre-wrap">
+                      {latestRelease.body?.split('---')[0] || "Discover the latest performance optimizations and features in this release."}
+                    </p>
+                  </div>
                 </div>
-                
-                {/* Minimalist Release Body */}
-                <div className="max-h-[120px] overflow-y-auto custom-scrollbar pr-2">
-                  <p className="text-[11px] leading-relaxed text-gray-400 font-medium whitespace-pre-wrap">
-                    {latestRelease.body?.split('---')[0] || "Discover the latest performance optimizations and features in this release."}
+              ) : (
+                /* Auto-Update Progress Bar Container */
+                <div className="flex flex-col gap-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-blue-400 flex items-center gap-2">
+                      {downloadStatus === 'completed' ? (
+                        <span className="text-emerald-400">✓ Download Complete</span>
+                      ) : downloadStatus === 'error' ? (
+                        <span className="text-red-400">❌ Download Failed</span>
+                      ) : (
+                        <span>⚡ Downloading Installer...</span>
+                      )}
+                    </span>
+                    <span className="text-xs font-mono font-black text-white">
+                      {downloadProgress.percent}%
+                    </span>
+                  </div>
+
+                  {/* Progress Track */}
+                  <div className="w-full h-3 bg-black/50 rounded-full border border-white/10 overflow-hidden p-0.5 relative">
+                    <motion.div 
+                      className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 rounded-full shadow-[0_0_12px_rgba(59,130,246,0.8)]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${downloadProgress.percent}%` }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    />
+                  </div>
+
+                  {/* Metrics Footer */}
+                  <div className="flex items-center justify-between text-[10px] font-mono font-bold text-gray-400">
+                    <span>
+                      {formatBytes(downloadProgress.transferred)}
+                      {downloadProgress.total > 0 && ` / ${formatBytes(downloadProgress.total)}`}
+                    </span>
+                    <span>{formatSpeed(downloadProgress.speedBytesPerSec)}</span>
+                  </div>
+
+                  <p className="text-[10px] text-gray-500 font-medium italic mt-1">
+                    {downloadStatus === 'completed' ? (
+                      "Launching installer... The application will close automatically."
+                    ) : downloadStatus === 'error' ? (
+                      <span className="text-red-400/90">{errorMessage || "Failed to download update package."}</span>
+                    ) : (
+                      "App will automatically close and launch installer when ready."
+                    )}
                   </p>
                 </div>
-              </div>
+              )}
 
               {/* Action Footer */}
               <div className="flex flex-col gap-2 mt-1">
-                <button
-                  onClick={handleUpdate}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-[0_15px_30px_rgba(59,130,246,0.3)] transition-all active:scale-95 group"
-                >
-                  <Download size={14} className="group-hover:animate-bounce" />
-                  Update Now
-                </button>
-                
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSkip}
-                    className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/10 text-gray-500 hover:text-red-400 font-bold text-[10px] uppercase tracking-wider transition-all border border-transparent hover:border-red-500/20"
-                  >
-                    Skip Version
-                  </button>
-                  <button
-                    onClick={handleDismiss}
-                    className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white font-bold text-[10px] uppercase tracking-wider transition-all border border-transparent hover:border-white/10"
-                  >
-                    Maybe Later
-                  </button>
-                </div>
+                {!isDownloading ? (
+                  <>
+                    <button
+                      onClick={handleUpdate}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-[0_15px_30px_rgba(59,130,246,0.3)] transition-all active:scale-95 group"
+                    >
+                      <Download size={14} className="group-hover:animate-bounce" />
+                      {(window as any).electronAPI ? "Auto Download & Update (一鍵下載安裝)" : "Update Now"}
+                    </button>
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleSkip}
+                        className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/10 text-gray-500 hover:text-red-400 font-bold text-[10px] uppercase tracking-wider transition-all border border-transparent hover:border-red-500/20"
+                      >
+                        Skip Version
+                      </button>
+                      <button
+                        onClick={handleDismiss}
+                        className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white font-bold text-[10px] uppercase tracking-wider transition-all border border-transparent hover:border-white/10"
+                      >
+                        Maybe Later
+                      </button>
+                    </div>
+                  </>
+                ) : downloadStatus === 'error' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleUpdate}
+                      className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-[10px] uppercase tracking-wider transition-all"
+                    >
+                      Retry Download
+                    </button>
+                    <button
+                      onClick={() => window.open(latestRelease?.html_url || 'https://rabbit20031225.github.io/LMU-Telemetry-Lab/', '_blank')}
+                      className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[10px] uppercase tracking-wider transition-all"
+                    >
+                      Open Release Page
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

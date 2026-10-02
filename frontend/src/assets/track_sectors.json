@@ -190,5 +190,19 @@
       "S2": "right",
       "S3": "right"
     }
+  },
+  "Grand Prix of Long Beach": {
+    "Default": {
+      "S1": "left",
+      "S2": "right",
+      "S3": "right"
+    }
+  },
+  "Michelin Raceway Road Atlanta": {
+    "Default": {
+      "S1": "left",
+      "S2": "right",
+      "S3": "right"
+    }
   }
 }

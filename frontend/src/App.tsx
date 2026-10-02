@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { ChartConfig } from './types';
 import { MapTransitionOverlay } from './components/MapTransitionOverlay';
-import { useTelemetryStore, CATEGORY_CHART_CONFIGS } from './store/telemetryStore';
+import { useTelemetryStore, CATEGORY_CHART_CONFIGS, getStableChartKey } from './store/telemetryStore';
 import { FileManager } from './components/FileManager';
 import { CommunitySharesPanel } from './components/CommunitySharesPanel';
 import { TelemetryChart } from './components/TelemetryChart';
@@ -27,9 +28,11 @@ import { Lab3DRoot } from './components/Lab3D/Lab3DRoot';
 import { UpdateNotifier } from './components/UpdateNotifier';
 import { CarSetupView } from './components/CarSetupView';
 import { DiscordShareModal } from './components/DiscordShareModal';
+import { CustomBetaCanvas } from './components/CustomBetaCanvas';
 import {
   ArrowLeft,
   Settings,
+  Sparkles,
   Users,
   Database,
   ChevronDown,
@@ -49,12 +52,28 @@ import {
 
 
 
-const CategoryTab = memo(({ id, label, isActive }: { id: any, label: string, isActive: boolean }) => {
+const CategoryTab = memo(({ 
+    id, 
+    label, 
+    isActive, 
+    isCustom = false, 
+    onClick 
+}: { 
+    id: any; 
+    label: string; 
+    isActive: boolean; 
+    isCustom?: boolean; 
+    onClick?: () => void; 
+}) => {
     const setActiveChartCategory = useTelemetryStore(state => state.setActiveChartCategory);
     const chartLayoutMode = useTelemetryStore(state => state.chartLayoutMode);
     const setChartLayoutMode = useTelemetryStore(state => state.setChartLayoutMode);
 
     const handleClick = () => {
+        if (onClick) {
+            onClick();
+            return;
+        }
         if (chartLayoutMode === 'custom') {
             setChartLayoutMode('preset');
         }
@@ -64,13 +83,155 @@ const CategoryTab = memo(({ id, label, isActive }: { id: any, label: string, isA
     return (
         <button
             onClick={handleClick}
-            className={`relative z-10 px-8 h-full flex items-center justify-center text-[11px] font-black uppercase tracking-[0.1em] transition-colors duration-300 flex-1 min-w-[120px] ${
-                isActive && chartLayoutMode === 'preset' ? 'text-white' : 'text-gray-500 hover:text-white'
+            className={`relative z-10 px-6 h-full flex items-center justify-center text-[11px] font-black uppercase tracking-[0.1em] transition-colors duration-300 flex-1 min-w-[100px] gap-1.5 cursor-pointer ${
+                isActive 
+                    ? 'text-white' 
+                    : isCustom 
+                        ? 'text-purple-400 hover:text-purple-300' 
+                        : 'text-gray-500 hover:text-white'
             }`}
         >
-            {label}
+            {isCustom && <Sparkles size={12} className={isActive ? 'text-purple-200' : 'text-purple-400 animate-pulse'} />}
+            <span>{label}</span>
         </button>
     );
+});
+
+const CATEGORY_ORDER: string[] = ['Driver', 'Tyres', 'Dynamics', 'Handling', 'Systems', 'Custom'];
+
+interface CategoryChartListProps {
+  category: string;
+  configs: ChartConfig[];
+  draggedStandardIndex: number | null;
+  dragOverStandardIndex: number | null;
+  movingStandardChartKey: string | null;
+  isStandardSwapping: boolean;
+  activeDragStandardIndex: number | null;
+  standardGroupMaxWheelMap: Record<string, number>;
+  isPlaying: boolean;
+  onMoveStandardChart: (key: string, dir: 'up' | 'down') => void;
+  onReorderStandardConfigs: (start: number, end: number) => void;
+  setDraggedStandardIndex: (idx: number | null) => void;
+  setDragOverStandardIndex: (idx: number | null) => void;
+  setActiveDragStandardIndex: (idx: number | null) => void;
+}
+
+const CategoryChartList: React.FC<CategoryChartListProps> = memo(({
+  category,
+  configs,
+  draggedStandardIndex,
+  dragOverStandardIndex,
+  movingStandardChartKey,
+  isStandardSwapping,
+  activeDragStandardIndex,
+  standardGroupMaxWheelMap,
+  isPlaying,
+  onMoveStandardChart,
+  onReorderStandardConfigs,
+  setDraggedStandardIndex,
+  setDragOverStandardIndex,
+  setActiveDragStandardIndex,
+}) => {
+  const [displayedConfigs, setDisplayedConfigs] = useState(configs);
+  const currentCategoryRef = useRef(category);
+
+  useEffect(() => {
+    if (currentCategoryRef.current === category) {
+      setDisplayedConfigs(configs);
+    }
+  }, [configs, category]);
+
+  return (
+    <div className="flex flex-col gap-2 min-w-0 w-full">
+      <AnimatePresence mode="popLayout" initial={false}>
+        {displayedConfigs.map((config, index) => {
+          const chartKey = `${config.id}-${config.wheelIndex ?? 'all'}`;
+          const stableKey = getStableChartKey(config);
+          const isDragging = draggedStandardIndex === index;
+          const isDragOver = dragOverStandardIndex === index;
+          const isMovingActive = movingStandardChartKey === chartKey;
+
+          const wIdx = config.wheelIndex ?? 0;
+          const maxWIdx = standardGroupMaxWheelMap[config.id] ?? 3;
+          const entryDelay = wIdx * 0.14;
+          const exitDelay = Math.max(0, maxWIdx - wIdx) * 0.14;
+
+          return (
+            <motion.div
+              key={stableKey}
+              layout="position"
+              initial={{ opacity: 0, scale: 0.95, y: -60 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1, 
+                y: 0,
+                transition: {
+                  layout: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.52 },
+                  y: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.48, delay: entryDelay },
+                  opacity: { duration: 0.35, ease: 'easeInOut', delay: entryDelay },
+                  scale: { duration: 0.35, ease: 'easeOut', delay: entryDelay }
+                }
+              }}
+              exit={{ 
+                opacity: 0, 
+                scale: 0.95, 
+                y: -60,
+                transition: {
+                  layout: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.52 },
+                  y: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.48, delay: exitDelay },
+                  opacity: { duration: 0.35, ease: 'easeInOut', delay: exitDelay },
+                  scale: { duration: 0.35, ease: 'easeOut', delay: exitDelay }
+                }
+              }}
+              draggable={activeDragStandardIndex === index}
+              onDragStart={() => setDraggedStandardIndex(index)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverStandardIndex(index);
+              }}
+              onDrop={() => {
+                if (draggedStandardIndex !== null && dragOverStandardIndex !== null && draggedStandardIndex !== dragOverStandardIndex) {
+                  onReorderStandardConfigs(draggedStandardIndex, dragOverStandardIndex);
+                }
+                setDraggedStandardIndex(null);
+                setDragOverStandardIndex(null);
+                setActiveDragStandardIndex(null);
+              }}
+              onDragEnd={() => {
+                setDraggedStandardIndex(null);
+                setDragOverStandardIndex(null);
+                setActiveDragStandardIndex(null);
+              }}
+              style={{ zIndex: isMovingActive ? 99 : 50 - index }}
+              className={`relative group/stdcard rounded-2xl ${
+                isMovingActive ? 'scale-[1.01]' : ''
+              } ${isStandardSwapping ? 'pointer-events-none' : 'pointer-events-auto'} ${
+                isDragging ? 'opacity-40 scale-[0.99] border border-dashed border-purple-500/50' : 'opacity-100'
+              } ${isDragOver ? 'ring-2 ring-purple-500/60 ring-offset-2 ring-offset-black/50' : ''}`}
+            >
+              <TelemetryChart
+                channel={config.id}
+                alias={config.alias}
+                color={config.color}
+                height={config.height}
+                syncKey="telemetry"
+                unit={config.unit}
+                wheelIndex={config.wheelIndex}
+                isPlaying={isPlaying}
+                showLapTime={false}
+                onMoveUp={() => onMoveStandardChart(chartKey, 'up')}
+                onMoveDown={() => onMoveStandardChart(chartKey, 'down')}
+                canMoveUp={index > 0}
+                canMoveDown={index < displayedConfigs.length - 1}
+                onDragHandleMouseDown={() => setActiveDragStandardIndex(index)}
+                onDragHandleMouseLeave={() => { if (draggedStandardIndex === null) setActiveDragStandardIndex(null); }}
+              />
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </div>
+  );
 });
 
 
@@ -96,6 +257,19 @@ function App() {
   const setActiveChartCategory = useTelemetryStore(state => state.setActiveChartCategory);
   const activeChartCategory = useTelemetryStore(state => state.activeChartCategory);
   const chartLayoutMode = useTelemetryStore(state => state.chartLayoutMode);
+  const isCustomBetaMode = useTelemetryStore(state => state.isCustomBetaMode);
+  const toggleCustomBetaMode = useTelemetryStore(state => state.toggleCustomBetaMode);
+
+  const currentViewKey = isCustomBetaMode ? 'Custom' : activeChartCategory;
+  const prevViewKeyRef = useRef(currentViewKey);
+  const viewDirectionRef = useRef(1);
+
+  if (prevViewKeyRef.current !== currentViewKey) {
+    const prevIdx = CATEGORY_ORDER.indexOf(prevViewKeyRef.current);
+    const currIdx = CATEGORY_ORDER.indexOf(currentViewKey);
+    viewDirectionRef.current = currIdx >= prevIdx ? 1 : -1;
+    prevViewKeyRef.current = currentViewKey;
+  }
   const liveDeltaStore = useTelemetryStore(state => state.liveDelta);
   const isPlaying = useTelemetryStore(state => state.isPlaying);
   const updatePlayback = useTelemetryStore(state => state.updatePlayback);
@@ -111,6 +285,24 @@ function App() {
   const speedUnit = useTelemetryStore(state => state.speedUnit);
   const tempUnit = useTelemetryStore(state => state.tempUnit);
   const chartConfigs = useTelemetryStore(state => state.chartConfigs);
+  const moveStandardChartChannel = useTelemetryStore(state => state.moveStandardChartChannel);
+  const reorderStandardChartConfigs = useTelemetryStore(state => state.reorderStandardChartConfigs);
+
+  const [draggedStandardIndex, setDraggedStandardIndex] = useState<number | null>(null);
+  const [dragOverStandardIndex, setDragOverStandardIndex] = useState<number | null>(null);
+  const [activeDragStandardIndex, setActiveDragStandardIndex] = useState<number | null>(null);
+  const [movingStandardChartKey, setMovingStandardChartKey] = useState<string | null>(null);
+  const [isStandardSwapping, setIsStandardSwapping] = useState(false);
+
+  const handleMoveStandardChart = (chartKey: string, direction: 'up' | 'down') => {
+    setIsStandardSwapping(true);
+    setMovingStandardChartKey(chartKey);
+    moveStandardChartChannel(chartKey, direction);
+    setTimeout(() => {
+      setIsStandardSwapping(false);
+      setMovingStandardChartKey(null);
+    }, 900);
+  };
   const isProcessingTrack = useTelemetryStore(state => state.isProcessingTrack);
   const show3DLab = useTelemetryStore(state => state.show3DLab);
   const setShow3DLab = useTelemetryStore(state => state.setShow3DLab);
@@ -126,6 +318,7 @@ function App() {
   const isGlobalTransitioning = useTelemetryStore(state => state.isGlobalTransitioning);
   const setIsMapTransitioning = useTelemetryStore(state => state.setIsMapTransitioning);
   const referenceSessionMetadata = useTelemetryStore(state => state.referenceSessionMetadata);
+
   const showSetupView = useTelemetryStore(state => state.showSetupView);
   const fetchSetup = useTelemetryStore(state => state.fetchSetup);
   const exportLap = useTelemetryStore(state => state.exportLap);
@@ -134,6 +327,30 @@ function App() {
   const isListLoading = useTelemetryStore(state => state.isListLoading);
   const selectedSegIdx = useTelemetryStore(state => state.selectedSegIdx);
   const selectedSectorIdx = useTelemetryStore(state => state.selectedSectorIdx);
+
+  const visibleStandardConfigs = useMemo(() => {
+    return chartConfigs.filter(c => {
+      if (!c.visible) return false;
+      if (c.id === 'Time Delta') {
+        const hasRef = referenceLapIdx !== null || referenceLap !== null;
+        if (!hasRef) {
+          if (selectedSectorIdx !== null) return false;
+          if (selectedSegIdx === null) return false;
+        }
+      }
+      if (c.id === 'SoC' && sessionMetadata?.carClass !== 'Hyper') return false;
+      if (c.id === 'ABS' && sessionMetadata?.carClass !== 'GT3') return false;
+      return true;
+    });
+  }, [chartConfigs, referenceLapIdx, referenceLap, selectedSectorIdx, selectedSegIdx, sessionMetadata?.carClass]);
+
+  const standardGroupMaxWheelMap = useMemo(() => {
+    return visibleStandardConfigs.reduce<Record<string, number>>((acc, c) => {
+      const wIdx = c.wheelIndex ?? 0;
+      acc[c.id] = Math.max(acc[c.id] ?? 0, wIdx);
+      return acc;
+    }, {});
+  }, [visibleStandardConfigs]);
 
   const trackName = sessionMetadata?.trackName;
   const layoutName = sessionMetadata?.layoutKey || sessionMetadata?.trackLayout || 'Default';
@@ -1424,9 +1641,9 @@ function App() {
                       className="flex-1 min-w-0 flex flex-col p-4 gap-4 overflow-y-auto custom-scrollbar"
                       style={{ minWidth: MIN_CHART_WIDTH }}
                     >
-                      {/* Category Navigation Tabs - Only shown in Preset Mode */}
+                      {/* Category Navigation Tabs with Integrated Custom Tab - Only shown in Preset Mode */}
                       {chartLayoutMode === 'preset' && (
-                        <div className="sticky top-0 z-[100] flex justify-center pt-2 pb-1 -mx-4">
+                        <div className="sticky top-0 z-[100] flex items-center justify-center pt-2 pb-1 pointer-events-none">
                           <div className="relative flex items-center px-2 py-1 bg-[#1a1a1e]/80 backdrop-blur-3xl rounded-full border border-white/10 h-10 group/toggle shadow-[0_8px_20px_rgba(0,0,0,0.5)] pointer-events-auto" onMouseMove={handleGlassMouseMove}>
                             <div className="relative flex items-center h-full">
                               {(() => {
@@ -1436,14 +1653,16 @@ function App() {
                                   { id: 'Dynamics', label: 'DYNAMICS' },
                                   { id: 'Handling', label: 'HANDLING' },
                                   { id: 'Systems', label: 'SYSTEMS' },
+                                  { id: 'Custom', label: 'CUSTOM', isCustom: true },
                                 ].filter(cat => {
-                                  if (cat.id === 'Driver') return true;
+                                  if (cat.id === 'Driver' || cat.id === 'Custom') return true;
                                   if (!telemetryData) return false;
                                   const configs = CATEGORY_CHART_CONFIGS[cat.id as any];
                                   return configs?.some(c => telemetryData[c.id] !== undefined);
                                 });
 
-                                const activeIndex = availableTabs.findIndex(t => t.id === activeChartCategory);
+                                const currentActiveId = isCustomBetaMode ? 'Custom' : activeChartCategory;
+                                const activeIndex = availableTabs.findIndex(t => t.id === currentActiveId);
 
                                 return (
                                   <>
@@ -1452,14 +1671,18 @@ function App() {
                                       <AnimatePresence>
                                         <motion.div 
                                           layoutId="activeCategoryBlock"
-                                          className="absolute bg-blue-600 rounded-full shadow-[0_0_12px_rgba(37,99,235,0.5)]"
+                                          className={`absolute rounded-full transition-colors duration-300 ${
+                                            currentActiveId === 'Custom'
+                                              ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 shadow-[0_0_16px_rgba(168,85,247,0.6)]'
+                                              : 'bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.5)]'
+                                          }`}
                                           style={{ 
                                             height: 'calc(100% - 2px)',
                                             width: `calc(${100 / availableTabs.length}% - 4px)`,
                                             left: `calc(${(activeIndex / availableTabs.length) * 100}% + 2px)`,
                                             top: '1px'
                                           }}
-                                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                                          transition={{ type: 'spring', stiffness: 320, damping: 32 }}
                                         />
                                       </AnimatePresence>
                                     )}
@@ -1469,7 +1692,16 @@ function App() {
                                         key={cat.id} 
                                         id={cat.id as any} 
                                         label={cat.label}
-                                        isActive={activeChartCategory === cat.id}
+                                        isActive={currentActiveId === cat.id}
+                                        isCustom={cat.isCustom}
+                                        onClick={() => {
+                                          if (cat.id === 'Custom') {
+                                            if (!isCustomBetaMode) toggleCustomBetaMode();
+                                          } else {
+                                            if (isCustomBetaMode) toggleCustomBetaMode();
+                                            setActiveChartCategory(cat.id as any);
+                                          }
+                                        }}
                                       />
                                     ))}
                                   </>
@@ -1480,40 +1712,60 @@ function App() {
                         </div>
                       )}
 
-                      <div className="flex flex-col gap-2 min-w-0">
-                        {chartConfigs
-                          .filter(c => {
-                            if (!c.visible) return false;
-                            if (c.id === 'Time Delta') {
-                              const hasRef = referenceLapIdx !== null || referenceLap !== null;
-                              if (!hasRef) {
-                                if (selectedSectorIdx !== null) return false;
-                                if (selectedSegIdx === null) return false;
-                              }
-                            }
-                            
-                            // Class-based visibility
-                            if (c.id === 'SoC' && sessionMetadata?.carClass !== 'Hyper') return false;
-                            if (c.id === 'ABS' && sessionMetadata?.carClass !== 'GT3') return false;
-                            
-                            return true;
-                          })
-                          .sort((a, b) => a.order - b.order)
-                          .map(config => (
-                            <TelemetryChart
-                              key={`${config.id}-${config.wheelIndex ?? 'none'}`}
-                              channel={config.id}
-                              alias={config.alias}
-                              color={config.color}
-                              height={config.height}
-                              syncKey="telemetry"
-                              unit={config.unit}
-                              wheelIndex={config.wheelIndex}
-                              isPlaying={isPlaying}
-                              showLapTime={false}
-                            />
-                          ))
-                        }
+                      <div className="flex flex-col gap-2 min-w-0 overflow-x-hidden">
+                        <AnimatePresence mode="wait" custom={viewDirectionRef.current} initial={false}>
+                          <motion.div
+                            key={currentViewKey}
+                            custom={viewDirectionRef.current}
+                            variants={{
+                              enter: (direction: number) => ({
+                                x: direction > 0 ? 40 : -40,
+                                opacity: 0,
+                              }),
+                              center: {
+                                x: 0,
+                                opacity: 1,
+                                transition: {
+                                  x: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.22 },
+                                  opacity: { duration: 0.18, ease: 'easeOut' },
+                                },
+                              },
+                              exit: (direction: number) => ({
+                                x: direction > 0 ? -40 : 40,
+                                opacity: 0,
+                                transition: {
+                                  x: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.16 },
+                                  opacity: { duration: 0.14, ease: 'easeIn' },
+                                },
+                              }),
+                            }}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            className="flex flex-col gap-2 min-w-0 w-full"
+                          >
+                            {isCustomBetaMode ? (
+                              <CustomBetaCanvas isPlaying={isPlaying} />
+                            ) : (
+                              <CategoryChartList
+                                category={activeChartCategory}
+                                configs={visibleStandardConfigs}
+                                draggedStandardIndex={draggedStandardIndex}
+                                dragOverStandardIndex={dragOverStandardIndex}
+                                movingStandardChartKey={movingStandardChartKey}
+                                isStandardSwapping={isStandardSwapping}
+                                activeDragStandardIndex={activeDragStandardIndex}
+                                standardGroupMaxWheelMap={standardGroupMaxWheelMap}
+                                isPlaying={isPlaying}
+                                onMoveStandardChart={handleMoveStandardChart}
+                                onReorderStandardConfigs={reorderStandardChartConfigs}
+                                setDraggedStandardIndex={setDraggedStandardIndex}
+                                setDragOverStandardIndex={setDragOverStandardIndex}
+                                setActiveDragStandardIndex={setActiveDragStandardIndex}
+                              />
+                            )}
+                          </motion.div>
+                        </AnimatePresence>
                       </div>
                     </div>
                   )}
