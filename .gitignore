@@ -11,6 +11,16 @@ dist/
 /build/
 
 # ===========================
+# Java backend
+# ===========================
+backend-java/target/
+.m2repo/
+.devdata/
+.devdata-real/
+tools/parity/report.json
+backend-java/.build-tmp/
+
+# ===========================
 # Node / Frontend
 # ===========================
 node_modules/

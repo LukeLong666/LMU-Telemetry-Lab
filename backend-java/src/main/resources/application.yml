@@ -1,0 +1,35 @@
+server:
+  address: 127.0.0.1
+  port: ${SERVER_PORT:8000}
+  error:
+    include-message: never
+    include-stacktrace: never
+
+spring:
+  application:
+    name: lmu-telemetry-lab
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+  web:
+    resources:
+      add-mappings: true
+
+lmu:
+  dev-mode: ${LMU_DEV_MODE:true}
+  data-dir: ${APP_DATA_DIR:}
+  telemetry-dir: '${LMU_TELEMETRY_DIR:D:\Program Files (x86)\Steam\steamapps\common\Le Mans Ultimate\UserData\Telemetry}'
+  frontend-dir: ${LMU_FRONTEND_DIR:../frontend/dist}
+  steering-wheel-dir: ${LMU_STEERING_WHEEL_DIR:../frontend/public/steering wheel}
+  version: 1.5.3
+
+logging:
+  file:
+    name: ${LMU_LOG_FILE:backend_debug.log}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} - %-5level - %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} - %-5level - %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.lmutl: INFO
