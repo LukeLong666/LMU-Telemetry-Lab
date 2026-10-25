@@ -17,6 +17,7 @@ backend-java/target/
 .m2repo/
 .devdata/
 .devdata-real/
+.devdata-node/
 tools/parity/report.json
 backend-java/.build-tmp/
 

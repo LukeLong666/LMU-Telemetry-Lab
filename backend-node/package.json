@@ -1,0 +1,33 @@
+{
+  "name": "backend-node",
+  "private": true,
+  "version": "1.5.3-node",
+  "description": "Node.js/Fastify backend for LMU Telemetry Lab",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.5.6-r.2",
+    "@fastify/cors": "^11.1.0",
+    "@fastify/multipart": "^9.3.0",
+    "discord.js": "^14.27.0",
+    "fastify": "^5.12.7",
+    "pino": "^10.4.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.3",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
